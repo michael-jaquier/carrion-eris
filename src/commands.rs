@@ -1,10 +1,10 @@
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
-use crate::player::{Character, CharacterTraits, Classes};
-use crate::{CarrionError, Context, Error, Record};
-use std::time::Duration;
-use tokio::time::sleep;
-use tracing::field::debug;
+use crate::player::Character;
+use crate::{Context, Error};
+
+use crate::classes::Classes;
+use crate::traits::CharacterTraits;
 use tracing::info;
 
 /// Show this help menu
@@ -19,18 +19,21 @@ pub async fn help(
         ctx,
         command.as_deref(),
         poise::builtins::HelpConfiguration {
-            extra_text_at_bottom: "This is an example bot made to showcase features of my custom Discord bot framework",
+            extra_text_at_bottom:
+                "Carrion-Eris is an RPG autobattler. To begin /create a character.",
             ..Default::default()
         },
     )
-        .await?;
+    .await?;
     Ok(())
 }
-
+/// Select your character traits
 #[poise::command(prefix_command, slash_command)]
 pub async fn character_trait(
     ctx: Context<'_>,
-    #[autocomplete = "poise::builtins::autocomplete_command"] command: Option<String>,
+    #[autocomplete = "poise::builtins::autocomplete_command"]
+    #[description = "Select a trait from the list of valid traits"]
+    command: Option<String>,
 ) -> Result<(), Error> {
     info!("character_trait input {:?}", command);
     let id = ctx.author().id.0;
@@ -55,7 +58,7 @@ pub async fn character_trait(
                 character.available_traits -= 1;
                 let record = SurrealProducer::create_or_update_character(character.clone()).await?;
                 match record {
-                    Some(record) => {
+                    Some(_record) => {
                         let created_character = SurrealConsumer::get_character(id)
                             .await?
                             .expect("Failed to create character");
@@ -79,7 +82,7 @@ pub async fn character_trait(
     }
     Ok(())
 }
-
+/// Delete your character and start over
 #[poise::command(prefix_command, slash_command)]
 pub async fn delete_character(
     ctx: Context<'_>,
@@ -93,17 +96,20 @@ pub async fn delete_character(
             ctx.reply(format!("No character to delete")).await?;
             Ok(())
         }
-        Some(e) => {
+        Some(_e) => {
             ctx.reply(format!("Deleted character")).await?;
             Ok(())
         }
     }
 }
 
+/// Create your character using a class
 #[poise::command(prefix_command, slash_command)]
 pub async fn create(
     ctx: Context<'_>,
-    #[autocomplete = "poise::builtins::autocomplete_command"] command: Option<String>,
+    #[autocomplete = "poise::builtins::autocomplete_command"]
+    #[description = "Create a character form the list of valid classes"]
+    command: Option<String>,
 ) -> Result<(), Error> {
     info!("create_character");
     info!("Command: {:?}", command);
@@ -116,7 +122,7 @@ pub async fn create(
                 let new_character = Character::new(name, id, class);
                 let record = SurrealProducer::create_character(new_character).await?;
                 match record {
-                    Some(record) => {
+                    Some(_record) => {
                         let created_character = SurrealConsumer::get_character(id)
                             .await?
                             .expect("Failed to create character");
@@ -135,8 +141,9 @@ pub async fn create(
             }
         }
     } else {
-        // TODO: Give a list of valid classes
-        ctx.reply("No class provided").await?;
+        let valid_classes = Classes::valid_classes();
+        ctx.reply(format!("Valid classes:\n {}", valid_classes))
+            .await?;
     }
 
     Ok(())

@@ -1,5 +1,6 @@
-use crate::player::{Character, CharacterAttributes};
-use crate::Attribute;
+use crate::player::Character;
+use crate::units::Attribute;
+use crate::units::Attributes;
 use rand::distributions::Standard;
 use rand::prelude::{Distribution, SliceRandom};
 use rand::{thread_rng, Rng};
@@ -19,12 +20,6 @@ impl AttackType {
             AttackType::Magical(d) => *d,
         }
     }
-}
-
-pub struct Attack {
-    pub(crate) attack_type: AttackType,
-    pub(crate) damage_type: Vec<DamageType>,
-    pub(crate) critical: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -66,7 +61,7 @@ pub struct Enemy {
     pub(crate) defense: u32,
     pub(crate) resistance: u32,
     pub(crate) gold: u32,
-    pub(crate) attributes: CharacterAttributes,
+    pub(crate) attributes: Attributes,
     pub(crate) items: Vec<Item>,
     pub(crate) state: EnemyState,
     actions: Vec<MobAction>,
@@ -86,20 +81,26 @@ impl Enemy {
     }
     fn ranges(level: u32) -> u32 {
         let mut rng = rand::thread_rng();
-        let ranges = (1..(level.pow(3)) + 1);
+        let ranges = 1..(level.pow(3)) + 1;
         rng.gen_range(ranges)
     }
 
     fn slow_scaling_ranges(level: u32) -> u32 {
         let mut rng = rand::thread_rng();
-        let ranges = (1..(level + 1));
+        let ranges = 1..(level + 1);
+        rng.gen_range(ranges)
+    }
+
+    fn linear_scaling(level: u32) -> u32 {
+        let mut rng = rand::thread_rng();
+        let ranges = 1..(level * 10);
         rng.gen_range(ranges)
     }
     pub fn weak(mob: Mob, level: u32) -> Enemy {
         Enemy {
             kind: mob.clone(),
             level,
-            experience: Enemy::ranges(level),
+            experience: Enemy::linear_scaling(level),
             health: Enemy::ranges(level) as i32,
             defense: Enemy::ranges(level),
             resistance: Enemy::ranges(level),
@@ -144,7 +145,7 @@ impl Default for Enemy {
             defense: 0,
             resistance: 0,
             gold: 0,
-            attributes: CharacterAttributes::default(),
+            attributes: Attributes::default(),
             items: vec![],
             state: EnemyState::Alive,
             actions: vec![],

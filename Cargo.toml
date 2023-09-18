@@ -11,7 +11,7 @@ authors = ["Michael Jaquier <michael.jaquier@nexthink.com>"]
 dotenv = "0.15.0"
 serde = { version = "1.0.188", features = ["derive"] }
 serenity = { version = "0.11.6", default-features = false, features = ["client", "gateway", "rustls_backend", "model"] }
-surrealdb = { version = "1.0.0", features = ["http", "kv-mem", "protocol-http"] }
+surrealdb = { version = "1.0.0", features = ["http", "kv-mem", "protocol-http", "kv-rocksdb"] }
 tokio = { version = "1.31.0", features = ["macros", "rt-multi-thread", "tracing"] }
 tracing = { version = "0.1.37", features = [] }
 tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

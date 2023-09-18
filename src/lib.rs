@@ -1,8 +1,12 @@
 pub mod battle;
+pub mod classes;
 pub mod commands;
 pub mod database;
 pub mod enemies;
+pub mod mutators;
 pub mod player;
+pub mod traits;
+pub mod units;
 
 // Custom user data passed to all command functions
 pub struct State {}
@@ -13,14 +17,15 @@ type Context<'a> = poise::Context<'a, State, Error>;
 use crate::AdvantageState::Advantage;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use serenity::model::prelude::command::CommandOptionType::Attachment;
-use std::fmt::Display;
-use std::ops::{Add, Deref, Sub};
+
 use surrealdb::sql::Thing;
 use thiserror::Error;
-use tracing::info;
-use tracing::span::Attributes;
+
+use crate::player::PlayerAction;
+
+use std::fmt::{Display, Formatter};
 use AdvantageState::Disadvantage;
+use crate::Die::D20;
 
 #[derive(Error, Debug)]
 pub enum CarrionError {
@@ -39,101 +44,48 @@ pub struct Record {
     #[allow(dead_code)]
     pub id: Thing,
 }
-
-#[derive(Debug, Deserialize, Serialize, Copy, Clone, PartialOrd, PartialEq)]
-pub enum Attribute {
-    Strength(u32),
-    Intelligence(u32),
-    Dexterity(u32),
-    Constitution(u32),
-    Wisdom(u32),
-    Charisma(u32),
+#[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
+pub struct DieObject {
+   die: Die,
+   advantage: AdvantageState,
+   success: u32,
+   critical: u32,
 }
 
-impl Attribute {
-    pub fn absolute_difference(&self, other: &Self) -> i32 {
-        **self as i32 - **other as i32
-    }
-    pub fn plus(&mut self, other: u32) {
-        match self {
-            Attribute::Strength(v) => *v += other,
-            Attribute::Intelligence(v) => *v += other,
-            Attribute::Dexterity(v) => *v += other,
-            Attribute::Constitution(v) => *v += other,
-            Attribute::Wisdom(v) => *v += other,
-            Attribute::Charisma(v) => *v += other,
+impl DieObject {
+    pub fn new(die: Die) -> Self {
+        Self {
+            die,
+            advantage: AdvantageState::None,
+            success: die.sides(),
+            critical: die.sides(),
         }
     }
-
-    pub fn minus(&mut self, other: u32) {
-        match self {
-            Attribute::Strength(v) => (*v).checked_sub(other).unwrap_or(0),
-            Attribute::Intelligence(v) => (*v).checked_sub(other).unwrap_or(0),
-            Attribute::Dexterity(v) => (*v).checked_sub(other).unwrap_or(0),
-            Attribute::Constitution(v) => (*v).checked_sub(other).unwrap_or(0),
-            Attribute::Wisdom(v) => (*v).checked_sub(other).unwrap_or(0),
-            Attribute::Charisma(v) => (*v).checked_sub(other).unwrap_or(0),
-        };
+    pub fn roll(&self) -> u32 {
+       self.die.roll(self.advantage)
+    }
+    pub fn crit(&self) -> bool {
+       self.die.roll(self.advantage) >= self.critical
+    }
+    pub fn success(&self) -> bool {
+       self.die.roll(self.advantage) >= self.success
     }
 
-    pub fn inner(&self) -> u32 {
-        match self {
-            Attribute::Strength(v) => *v,
-            Attribute::Intelligence(v) => *v,
-            Attribute::Dexterity(v) => *v,
-            Attribute::Constitution(v) => *v,
-            Attribute::Wisdom(v) => *v,
-            Attribute::Charisma(v) => *v,
-        }
+    pub fn set_success(&mut self, success: u32) {
+        self.success = success;
+    }
+    pub fn set_critical(&mut self, critical: u32) {
+        self.critical = critical;
+    }
+
+}
+
+impl From<Die> for DieObject {
+    fn from(die: Die) -> Self {
+        Self::new(die)
     }
 }
 
-impl Deref for Attribute {
-    type Target = u32;
-
-    fn deref(&self) -> &Self::Target {
-        match self {
-            Attribute::Strength(v) => v,
-            Attribute::Intelligence(v) => v,
-            Attribute::Dexterity(v) => v,
-            Attribute::Constitution(v) => v,
-            Attribute::Wisdom(v) => v,
-            Attribute::Charisma(v) => v,
-        }
-    }
-}
-
-impl Add for Attribute {
-    type Output = Attribute;
-
-    fn add(self, rhs: Self) -> Self::Output {
-        let v = *self + *rhs;
-        match self {
-            Attribute::Strength(_) => Attribute::Strength(v),
-            Attribute::Intelligence(_) => Attribute::Intelligence(v),
-            Attribute::Dexterity(_) => Attribute::Dexterity(v),
-            Attribute::Constitution(_) => Attribute::Constitution(v),
-            Attribute::Wisdom(_) => Attribute::Wisdom(v),
-            Attribute::Charisma(_) => Attribute::Charisma(v),
-        }
-    }
-}
-
-impl Sub for Attribute {
-    type Output = Attribute;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        let v = self.checked_sub(*rhs).unwrap_or(0);
-        match self {
-            Attribute::Strength(_) => Attribute::Strength(v),
-            Attribute::Intelligence(_) => Attribute::Intelligence(v),
-            Attribute::Dexterity(_) => Attribute::Dexterity(v),
-            Attribute::Constitution(_) => Attribute::Constitution(v),
-            Attribute::Wisdom(_) => Attribute::Wisdom(v),
-            Attribute::Charisma(_) => Attribute::Charisma(v),
-        }
-    }
-}
 #[derive(Clone, PartialEq, Serialize, Deserialize, Copy, Debug)]
 pub enum Die {
     D4,
@@ -159,7 +111,7 @@ impl Die {
     }
     fn roll(&self, advantage: AdvantageState) -> u32 {
         let mut rng = rand::thread_rng();
-        let ranges = (1..self.sides() + 1);
+        let ranges = 1..self.sides() + 1;
         if advantage == Advantage {
             let roll1 = rng.gen_range(ranges.clone());
             let roll2 = rng.gen_range(ranges);
@@ -176,98 +128,154 @@ impl Die {
     fn success(
         &self,
         target: u32,
-        critical_success: Option<u32>,
         advantage: AdvantageState,
-    ) -> (bool, CriticalRole) {
+    ) -> bool {
         let roll = self.roll(advantage);
-        let critical = match roll {
-            r if r >= critical_success.unwrap_or(20) => CriticalRole::Success,
-            r if r == 1 => CriticalRole::Failure,
-            _ => CriticalRole::None,
-        };
-        (roll >= target, critical)
+        roll >= target
+    }
+
+    fn critical(&self, target: u32, advantage: AdvantageState) -> bool {
+        let critical_dice = D20;
+        let roll = critical_dice.roll(advantage);
+        roll >= target
     }
 }
 
-type Role = (bool, CriticalRole);
-type RoleResults = Vec<Role>;
-
-#[derive(Clone, PartialEq, Serialize, Deserialize, Copy)]
-pub enum CriticalRole {
-    Success,
-    Failure,
-    None,
-}
 #[derive(Clone, PartialEq, Serialize, Deserialize, Copy, Debug)]
-enum AdvantageState {
+pub enum AdvantageState {
     Advantage,
     Disadvantage,
     None,
 }
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct Dice {
-    pub dice: Die,
-    pub number: u32,
-    pub critical_success: u32,
-    critical_failure: u32,
-    advantage: AdvantageState,
-    stored_target: Option<u32>,
+    dice: Vec<DieObject>,
 }
 
 impl Dice {
-    pub fn new(dice: Die, number: u32, critical_success: Option<u32>) -> Self {
+    pub fn new(dice: Vec<DieObject>) -> Self {
         Self {
             dice,
-            number,
-            critical_success: critical_success.unwrap_or(20),
-            critical_failure: 1,
-            advantage: AdvantageState::None,
-            stored_target: None,
+
         }
     }
-    fn success_roll(&self, target: u32) -> Role {
+    fn success_roll_all(&self) -> Vec<bool> {
         self.dice
-            .success(target, Some(self.critical_success), self.advantage)
-    }
-    fn success_roll_all(&self, target: u32) -> RoleResults {
-        (0..self.number)
-            .map(|_| self.success_roll(target))
+            .iter()
+            .map(|d| d.success())
             .collect()
     }
-    pub fn success(&self, target: Option<u32>) -> bool {
-        let target = target.unwrap_or(self.stored_target.unwrap_or(20));
-        self.success_roll_all(target).iter().any(|(s, _)| *s)
+    pub fn success(&self) -> bool {
+        self.success_roll_all().iter().any(|s| *s)
     }
 
-    pub fn roll_all(&self) -> u32 {
-        (0..self.number)
-            .map(|_| self.dice.roll(self.advantage))
-            .sum()
+    pub fn roll_sum(&self) -> u32 {
+        self.dice.iter().map(|d| d.roll()).sum()
+    }
+
+
+    pub fn add_die(&mut self, die: Vec<DieObject>) {
+        self.dice.extend(die);
     }
 
     pub fn advantage(&mut self) {
-        self.advantage = Advantage;
+        self.dice.iter_mut().for_each(|d| d.advantage = Advantage);
     }
-
     pub fn disadvantage(&mut self) {
-        self.advantage = Disadvantage;
+        self.dice.iter_mut().for_each(|d| d.advantage = Disadvantage);
     }
 
-    pub fn set_target(&mut self, target: u32) {
-        self.stored_target = Some(target);
-    }
+
 }
 
 impl Default for Dice {
     fn default() -> Self {
         Self {
-            dice: Die::D20,
-            number: 1,
-            critical_success: 20,
-            critical_failure: 1,
-            advantage: AdvantageState::None,
-            stored_target: None,
+            dice: vec![Die::D20.into()],
         }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct BattleInfo {
+    pub action: PlayerAction,
+    pub damage: i32,
+    pub player_name: String,
+    pub monster_name: String,
+    pub kill: bool,
+    pub critical: bool,
+    pub leveled_up: bool,
+    pub monster_hp: i32,
+    pub traits_available: u32,
+    pub next_level: u32,
+}
+
+impl BattleInfo {
+    pub fn new(
+        action: PlayerAction,
+        damage: i32,
+        player_name: String,
+        monster_name: String,
+        kill: bool,
+        critical: bool,
+        leveled_up: bool,
+        monster_hp: i32,
+        traits_available: u32,
+        next_level: u32,
+    ) -> Self {
+        Self {
+            action,
+            damage,
+            player_name,
+            monster_name,
+            kill,
+            critical,
+            leveled_up,
+            monster_hp,
+            traits_available,
+            next_level,
+        }
+    }
+}
+
+impl Display for BattleInfo {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut string = String::new();
+        string.push_str("\n🗡️");
+        string.push_str("\n\t");
+        string.push_str("🎲\t");
+        string.push_str(&self.player_name);
+        string.push_str(" attacked the ");
+        string.push_str(&self.monster_name);
+        string.push_str(" with ");
+        string.push_str(&self.action.to_string());
+        string.push_str(" dealing ");
+        string.push_str(&self.damage.to_string());
+        string.push_str(" damage!");
+        string.push_str("\t🎲");
+        if self.critical {
+            string.push_str(" 💥 Critical hit! 💥");
+        }
+        if self.kill {
+            string.push_str("\n\t");
+            string.push_str("☠️\t");
+            string.push_str("Killing blow");
+            string.push_str("\t☠️");
+        }
+        if self.leveled_up {
+            string.push_str("\n\t");
+            string.push_str("🎉\t");
+            string.push_str("Leveled up!");
+            string.push_str("\t🎉")
+        }
+        if self.traits_available > 0 {
+            string.push_str("\n\t");
+            string.push_str("🎉\t");
+            string.push_str("Trait available!");
+            string.push_str("\t🎉")
+        }
+        string.push_str("\n🗡️\n");
+        write!(f, "{}", string)
     }
 }
 
@@ -276,8 +284,8 @@ mod tests {
     use super::*;
     #[test]
     fn test_dice() {
-        let dice = Dice::new(Die::D20, 1, Some(20));
-        let result = dice.success(Some(1));
-        assert_eq!(result, true);
+        let dice = Dice::new(vec![Die::D20.into(); 3]);
+        let result = dice.success();
+        assert!(result);
     }
 }

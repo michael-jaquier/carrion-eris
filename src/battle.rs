@@ -1,47 +1,16 @@
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
 use crate::enemies::{Enemy, Mob};
-use crate::player::{BattleInfo, Character, Classes};
-use crate::CarrionResult;
-use rand::{random, thread_rng, Rng};
+use crate::player::Character;
+
+use rand::random;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+
 use std::fmt::Display;
-use std::future::Future;
-use tracing::{debug, info, warn};
-use tracing_subscriber::fmt::{format, init};
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub enum Notification {
-    TraitReady,
-}
 
-impl Display for Notification {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Notification::TraitReady => write!(f, "You have a trait point to spend"),
-        }
-    }
-}
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ToNotify(pub HashMap<u64, Notification>);
+use crate::BattleInfo;
+use tracing::{debug, warn};
 
-impl ToNotify {
-    pub fn new() -> Self {
-        Self(HashMap::new())
-    }
-
-    pub fn add(&mut self, user_id: u64, notification: Notification) {
-        self.0.insert(user_id, notification);
-    }
-
-    pub fn remove(&mut self, user_id: u64) {
-        self.0.remove(&user_id);
-    }
-
-    pub fn get(&self, user_id: u64) -> Option<&Notification> {
-        self.0.get(&user_id)
-    }
-}
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BattleResult {
     pub result: Vec<BattleInfo>,
@@ -56,15 +25,11 @@ impl Default for BattleResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BattleResults {
     pub results: Vec<BattleResult>,
-    pub notifications: ToNotify,
 }
 
 impl BattleResults {
-    pub fn new(results: Vec<BattleResult>, notifications: ToNotify) -> Self {
-        Self {
-            results,
-            notifications,
-        }
+    pub fn new(results: Vec<BattleResult>) -> Self {
+        Self { results }
     }
 
     pub fn append_result(&mut self, result: BattleResult) {
@@ -102,6 +67,7 @@ impl Display for BattleResult {
         let action = self.result[0].action.clone();
         let remaining_monster_hp = self.result.last().unwrap().monster_hp;
         let traits = self.result.last().unwrap().traits_available.clone();
+        let next_level = self.result.last().unwrap().next_level.clone();
         let mut string = String::new();
         string.push_str("\n🗡️");
         string.push_str("\n\t");
@@ -150,6 +116,13 @@ impl Display for BattleResult {
             string.push_str("\t🎉")
         }
 
+        if next_level > 0 {
+            string.push_str("\n\t");
+            string.push_str("✨\t");
+            string.push_str(&format!("You are {} xp away from leveling up!", next_level));
+            string.push_str("\t✨")
+        }
+
         if traits > 0 {
             string.push_str("\n\t");
             string.push_str("🏺\t");
@@ -163,10 +136,10 @@ impl Display for BattleResult {
 }
 
 async fn single_turn(character: &mut Character, enemy: &mut Enemy) -> BattleInfo {
-    let result = character.player_action(enemy);
+    let result = character.player_attack(enemy);
     // If the enemy is dead they should not act
     if enemy.alive() {
-        character.enemy_action(&enemy);
+        character.enemy_attack(&enemy);
     }
     result
 }
@@ -204,7 +177,7 @@ pub async fn all_battle() -> BattleResults {
     debug!("All Battle!");
     let characters = SurrealConsumer::get_all_characters().await;
     debug!("Characters: {:?}", characters);
-    let mut results = BattleResults::new(vec![], ToNotify::new());
+    let mut results = BattleResults::new(vec![]);
     match characters {
         Ok(characters) => {
             for mut character in characters {
@@ -217,12 +190,9 @@ pub async fn all_battle() -> BattleResults {
                 let result = battle(&mut character).await;
                 results.append_result(result);
 
-                if character.available_traits > 0 {
-                    results
-                        .notifications
-                        .add(character.user_id, Notification::TraitReady);
+                if character.hp > character.max_hp as i32 {
+                    warn!("Character: {:?} has more hp than max_hp", character)
                 }
-
                 SurrealProducer::create_or_update_character(character)
                     .await
                     .expect("Failed to update character");
@@ -234,25 +204,4 @@ pub async fn all_battle() -> BattleResults {
     }
 
     results
-}
-
-pub async fn all_notify() -> Vec<String> {
-    let characters = SurrealConsumer::get_all_characters().await;
-    let mut r = vec![];
-    match characters {
-        Ok(characters) => {
-            for character in characters {
-                if character.available_traits > 0 {
-                    r.push(format!(
-                        "{} has {} trait points to spend",
-                        character.name, character.available_traits
-                    ));
-                }
-            }
-        }
-        Err(_) => {
-            info!("Failed to get characters");
-        }
-    }
-    r
 }

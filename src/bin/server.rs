@@ -1,28 +1,24 @@
-use std::collections::HashSet;
 use std::env;
 
-use carrion_eris::database::surreal::consumer::SurrealConsumer;
-use carrion_eris::database::surreal::producer::SurrealProducer;
 use carrion_eris::database::surreal::SurrealDB;
-use carrion_eris::{commands, CarrionError, State};
+use carrion_eris::{commands, State};
 
 use poise::{async_trait, serenity_prelude as serenity};
-use serenity::builder::CreateMessage;
+
 use serenity::client::Context;
 use serenity::http::CacheHttp;
-use serenity::model::channel::{PrivateChannel, ReactionType};
-use serenity::model::gateway::Ready;
+
 use std::sync::atomic::AtomicBool;
-use std::{collections::HashMap, env::var, sync::Mutex, time::Duration};
+use std::time::Duration;
 
 use serenity::model::id::{ChannelId, GuildId};
-use serenity::model::prelude::component::ButtonStyle;
+
 use tokio::time::sleep;
 
-use tracing::{debug, error, info};
+use tracing::debug;
 use tracing_subscriber;
 
-use carrion_eris::battle::{all_battle, all_notify};
+use carrion_eris::battle::all_battle;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
@@ -56,19 +52,6 @@ impl serenity::EventHandler for Handler {
                 if let Err(why) = m {
                     eprintln!("Error sending message: {:?}", why);
                 };
-                let notification_channel = 1152604267933339729;
-                let notify = all_notify().await;
-                if notify.len() == 0 {
-                    continue;
-                }
-                let m = ChannelId(notification_channel)
-                    .send_message(&ctx_clone.http, |m| {
-                        m.content(format!("{}", notify.join("\n")))
-                    })
-                    .await;
-                if let Err(why) = m {
-                    eprintln!("Error sending message: {:?}", why);
-                };
             }
         });
     }
@@ -78,7 +61,10 @@ impl serenity::EventHandler for Handler {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().expect("Failed to read .env file");
     let filter = EnvFilter::from_default_env();
-    SurrealDB::connect("http://localhost:8000").await?;
+
+    // For me this is <> file:///Users/michael.jaquier/carrion-eris/ce.db
+    let db = env::var("DATABASE_URL").expect("Expected a database url in the environment");
+    SurrealDB::connect(&db).await?;
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer())

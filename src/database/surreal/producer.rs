@@ -1,9 +1,8 @@
 use crate::database::surreal::{CHARACTER_TABLE, DB, ENEMY_TABLE};
 use crate::enemies::Enemy;
 use crate::player::Character;
-use crate::{CarrionError, CarrionResult, Record};
-use tracing::{debug, error, info};
-use tracing_subscriber::fmt::init;
+use crate::{CarrionResult, Record};
+use tracing::{debug, info};
 
 pub struct SurrealProducer {}
 
@@ -22,7 +21,7 @@ impl SurrealProducer {
         info!("Deleted Character for: {:?}", record);
         Ok(record)
     }
-    pub async fn create_or_update_character(content: Character) -> CarrionResult<(Option<Record>)> {
+    pub async fn create_or_update_character(content: Character) -> CarrionResult<Option<Record>> {
         debug!("Updating Character for next run: {:?}", content);
         let record = DB
             .update((CHARACTER_TABLE, content.user_id))

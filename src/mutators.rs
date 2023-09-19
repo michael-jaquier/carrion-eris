@@ -1,6 +1,7 @@
 use crate::enemies::{Alignment, Enemy};
 use crate::player::{Character, PlayerAction};
-use crate::traits::CharacterTraits;
+use crate::traits::{CharacterTraits, TraitMutation};
+use std::ops::Div;
 
 use crate::dice::{AdvantageState, Dice, Die, DieObject};
 use rand::{thread_rng, Rng};
@@ -232,67 +233,145 @@ impl Default for AttackModifiers {
 }
 
 pub struct DefenseModifiers {
-    pub(crate) dodge: Dice,
-    pub(crate) magical: Dice,
-    pub(crate) physical: Dice,
+    character: Character,
 }
-
-impl DefenseModifiers {
-    pub fn new(dodge: Dice, magical: Dice, physical: Dice) -> Self {
+impl Default for DefenseModifiers {
+    fn default() -> Self {
         Self {
-            dodge,
-            magical,
-            physical,
+            character: Character::default(),
+        }
+    }
+}
+impl DefenseModifiers {
+    pub fn new(character: &Character) -> Self {
+        Self {
+            character: character.clone(),
+        }
+    }
+
+    fn multi(mutations: &Vec<TraitMutation>) -> f64 {
+        let mut multi = 0.0;
+        for m in mutations {
+            match m {
+                TraitMutation::MultiplicativeBonus(e) => {
+                    multi += e;
+                }
+                _ => {}
+            }
+        }
+        multi
+    }
+
+    fn advantage(mutations: &Vec<TraitMutation>) -> AdvantageState {
+        let mut advantage: i32 = 0;
+        let map_advantage = |x: AdvantageState| match x {
+            AdvantageState::Advantage => 1,
+            AdvantageState::Disadvantage => -1,
+            _ => 0,
+        };
+        for m in mutations {
+            match m {
+                TraitMutation::Advantage => {
+                    advantage = map_advantage(AdvantageState::Advantage);
+                }
+                TraitMutation::Disadvantage => {
+                    advantage = map_advantage(AdvantageState::Disadvantage);
+                }
+                _ => {}
+            }
+        }
+        advantage.into()
+    }
+
+    pub fn dodge(&self) -> bool {
+        let mutations = self.character.mutations().get_dodge();
+        let advantage = Self::advantage(&mutations);
+        let multi = Self::multi(&mutations);
+        let map_rolls = |x: bool| if x { 1.0 * multi } else { -1.0 };
+
+        let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).success());
+
+        for m in mutations {
+            match m {
+                TraitMutation::FlatIncrease(e) => {
+                    rolls += m(Dice::new(e.clone())
+                        .set_advantage(advantage.into())
+                        .success());
+                }
+                TraitMutation::FlatDecrease(e) => {
+                    rolls -= m(Dice::new(e.clone())
+                        .set_advantage((advantage * -1).into())
+                        .success());
+                }
+                _ => {}
+            }
+        }
+
+        rolls > 0.0
+    }
+
+    pub fn physical_mitigation(&self) -> f64 {
+        let mutations = self.character.mutations().get_physical_mitigation();
+        let advantage = Self::advantage(&mutations);
+        let multi = Self::multi(&mutations);
+        let map_rolls = |x: u32| (x as f64 * multi);
+
+        let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).roll());
+        for tr in mutations {
+            match tr {
+                TraitMutation::FlatIncrease(e) => {
+                    rolls += map_rolls(Dice::new(e.clone()).set_advantage(advantage.into()).roll());
+                }
+                TraitMutation::FlatDecrease(e) => {
+                    rolls -= map_rolls(
+                        Dice::new(e.clone())
+                            .set_advantage((advantage * -1).into())
+                            .roll(),
+                    );
+                }
+                _ => {}
+            }
+        }
+
+        // Negative mitigation is acceptable
+        rolls.min(90.0).div(100.0)
+    }
+    pub fn magical_suppress(&self) -> f64 {
+        let mutations = self.character.mutations().get_suppress();
+        let advantage = Self::advantage(&mutations);
+        let multi = Self::multi(&mutations);
+        let map_rolls = |x: bool| if x { 1.0 * multi } else { -1.0 };
+
+        let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).success());
+
+        for m in mutations {
+            match m {
+                TraitMutation::FlatIncrease(e) => {
+                    rolls += m(Dice::new(e.clone())
+                        .set_advantage(advantage.into())
+                        .success());
+                }
+                TraitMutation::FlatDecrease(e) => {
+                    rolls -= m(Dice::new(e.clone())
+                        .set_advantage((advantage * -1).into())
+                        .success());
+                }
+                _ => {}
+            }
+        }
+
+        if rolls > 0.0 {
+            0.5
+        } else {
+            0.0
         }
     }
 }
 
 impl From<&mut Character> for DefenseModifiers {
     fn from(character: &mut Character) -> Self {
-        let dodge_bonus = [&CharacterTraits::Nimble, &CharacterTraits::Lucky];
-        let _dodge_hits = dodge_bonus
-            .iter()
-            .filter(|&&item| character.traits.contains(&item))
-            .count() as u32;
-
-        let suppress_bonus = [&CharacterTraits::Hermit, &CharacterTraits::Cursed];
-        let _suppress_hits = suppress_bonus
-            .iter()
-            .filter(|&&item| character.traits.contains(&item))
-            .count() as u32;
-
-        let dodge_dice = |n| Dice::new(vec![Die::D20.into(); n]);
-        let dodge = match character.attributes.dexterity.inner() {
-            0..=5 => dodge_dice(1),
-            6..=10 => dodge_dice(2),
-            11..=15 => dodge_dice(2),
-            16..=20 => dodge_dice(3),
-            _ => dodge_dice(3),
-        };
-
-        let physical_dice = |n| Dice::new(vec![Die::D20.into(); n]);
-        let physical = match character.attributes.constitution.inner() {
-            0..=5 => physical_dice(1),
-            6..=10 => physical_dice(2),
-            11..=15 => physical_dice(3),
-            16..=20 => physical_dice(4),
-            _ => physical_dice(5),
-        };
-
-        let magical_dice = |n| Dice::new(vec![Die::D20.into(); n]);
-        let magical = match character.attributes.wisdom.inner() {
-            0..=5 => magical_dice(1),
-            6..=10 => magical_dice(2),
-            11..=15 => magical_dice(3),
-            16..=19 => magical_dice(4),
-            20 => magical_dice(5),
-            _ => magical_dice(5),
-        };
-
         Self {
-            dodge,
-            magical,
-            physical,
+            character: character.clone(),
         }
     }
 }
@@ -301,7 +380,7 @@ impl From<&mut Character> for DefenseModifiers {
 mod test {
     use crate::classes::Classes;
     use crate::mutators::AttackModifiers;
-    use crate::player::{Character};
+    use crate::player::Character;
 
     #[test]
     fn magic_missile_dps() {

@@ -59,9 +59,23 @@ impl DieObject {
         }
     }
 
+    pub fn get_sides(&self) -> u32 {
+        self.die.sides()
+    }
+
     pub fn set_critical_die(&mut self, die: Die) -> &mut DieObject {
         self.critical_die = die;
         self.critical = die.sides();
+        self
+    }
+
+    pub fn set_critical_advantage(&mut self) -> &mut DieObject {
+        self.advantage.transition(AdvantageState::Advantage);
+        self
+    }
+
+    pub fn set_critical_disadvantage(&mut self) -> &mut DieObject {
+        self.advantage.transition(AdvantageState::Disadvantage);
         self
     }
 }
@@ -114,9 +128,51 @@ impl Die {
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Copy, Debug)]
 pub enum AdvantageState {
-    Advantage,
-    Disadvantage,
-    None,
+    Advantage = 0,
+    Disadvantage = 1,
+    None = 2,
+}
+
+const STATE_MACHINE: [[AdvantageState; 3]; 3] = [
+    // From Advantage
+    [
+        AdvantageState::None,
+        AdvantageState::None,
+        AdvantageState::None,
+    ],
+    // From Disadvantage
+    [
+        AdvantageState::None,
+        AdvantageState::None,
+        AdvantageState::None,
+    ],
+    // From None
+    [
+        AdvantageState::Advantage,
+        AdvantageState::Disadvantage,
+        AdvantageState::None,
+    ],
+];
+
+impl AdvantageState {
+    fn as_size(&self) -> usize {
+        *self as usize
+    }
+    pub fn transition(&mut self, new_state: AdvantageState) {
+        *self = STATE_MACHINE[self.as_size()][new_state.as_size()];
+    }
+}
+
+impl From<i32> for AdvantageState {
+    fn from(n: i32) -> Self {
+        if n > 0 {
+            AdvantageState::Advantage
+        } else if n < 0 {
+            AdvantageState::Disadvantage
+        } else {
+            AdvantageState::None
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
@@ -127,6 +183,9 @@ pub struct Dice {
 impl Dice {
     pub fn new(dice: Vec<DieObject>) -> Self {
         Self { dice }
+    }
+    pub fn empty() -> Self {
+        Self { dice: vec![] }
     }
     fn success_roll_all(&self) -> Vec<bool> {
         self.dice.iter().map(|d| d.success()).collect()
@@ -153,19 +212,42 @@ impl Dice {
         self.dice.extend(die);
     }
 
-    pub fn advantage(&mut self) {
+    pub fn advantage(&mut self) -> &mut Dice {
         self.dice
             .iter_mut()
-            .for_each(|d| d.advantage = AdvantageState::Advantage);
+            .for_each(|d| d.advantage.transition(AdvantageState::Advantage));
+        self
     }
-    pub fn disadvantage(&mut self) {
+    pub fn disadvantage(&mut self) -> &mut Dice {
         self.dice
             .iter_mut()
-            .for_each(|d| d.advantage = AdvantageState::Disadvantage);
+            .for_each(|d| d.advantage.transition(AdvantageState::Disadvantage));
+        self
+    }
+
+    pub fn set_advantage(&mut self, advantage: AdvantageState) -> &mut Dice {
+        self.dice
+            .iter_mut()
+            .for_each(|d| d.advantage.transition(advantage));
+        self
     }
 
     pub fn dice(&mut self) -> &mut Vec<DieObject> {
         self.dice.as_mut()
+    }
+
+    pub fn set_success(&mut self, success: u32) {
+        self.dice.iter_mut().for_each(|d| d.set_success(success));
+    }
+
+    pub fn set_critical(&mut self, critical: i32) {
+        self.dice.iter_mut().for_each(|d| d.set_critical(critical));
+    }
+
+    pub fn set_critical_advantage(&mut self) {
+        self.dice.iter_mut().for_each(|d| {
+            d.set_critical_advantage();
+        });
     }
 }
 
@@ -180,7 +262,8 @@ impl Default for Dice {
 #[cfg(test)]
 mod tests {
 
-    use crate::dice::{Dice, Die};
+    use crate::dice::AdvantageState::Advantage;
+    use crate::dice::{AdvantageState, Dice, Die};
 
     #[test]
     fn test_lower_crit() {
@@ -240,5 +323,14 @@ mod tests {
         let average =
             ten_thousand_rolls.iter().sum::<u32>() as f64 / ten_thousand_rolls.len() as f64;
         assert!(average > 24.0 && average < 26.0, "average: {}", average);
+    }
+
+    #[test]
+    fn test_advantage_state_change() {
+        let mut advantage = AdvantageState::Advantage;
+        advantage.transition(AdvantageState::Disadvantage);
+        assert_eq!(advantage, AdvantageState::None);
+        advantage.transition(AdvantageState::Disadvantage);
+        assert_eq!(advantage, AdvantageState::Disadvantage);
     }
 }

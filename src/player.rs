@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::classes::Classes;
 use crate::mutators::{AttackModifiers, DefenseModifiers};
-use crate::traits::CharacterTraits;
+use crate::traits::{CharacterTraits, TraitMutations};
 use crate::units::Attributes;
 use std::collections::HashSet;
 
@@ -112,7 +112,27 @@ pub struct Character {
     pub(crate) available_traits: u32,
 }
 
+impl Default for Character {
+    fn default() -> Self {
+        Self {
+            level: 1,
+            name: String::new(),
+            user_id: 0,
+            class: Classes::Warrior,
+            max_hp: 20,
+            hp: 20,
+            experience: 0,
+            attributes: Attributes::default(),
+            traits: HashSet::new(),
+            available_traits: 0,
+        }
+    }
+}
+
 impl Character {
+    pub fn mutations(&self) -> TraitMutations {
+        CharacterTraits::apply_traits(&self.traits)
+    }
     pub fn experience_to_next_level(&self) -> u32 {
         (self.level as f64 * (self.level as f64).ln()) as u32 + self.level * 100
     }
@@ -209,27 +229,26 @@ impl Character {
     pub fn enemy_attack(&mut self, enemy: &Enemy) {
         let action = enemy.action();
         let defense: DefenseModifiers = self.into();
-        if defense.dodge.success() {
+        if defense.dodge() {
             return;
         }
 
-        let mitigate =
-            |n, dice: Dice| (n as f64 - (n as f64 * ((dice.roll()).min(90) as f64 / 100.0))) as i32;
         match action {
             AttackType::Physical(damage) => {
-                let mitigated_damage = mitigate(damage, defense.physical);
+                let mitigated_damage =
+                    damage - (damage as f64 * defense.physical_mitigation()) as u32;
                 if mitigated_damage < 0 {
                     warn!("{} has negative Physical damage!", self.name);
                 }
-                self.hp -= mitigated_damage;
+                self.hp -= mitigated_damage as i32;
             }
 
             AttackType::Magical(damage) => {
-                let mitigated_damage = mitigate(damage, defense.magical);
+                let mitigated_damage = damage - (damage as f64 * defense.magical_suppress()) as u32;
                 if mitigated_damage < 0 {
                     warn!("{} has negative Magical damage!", self.name);
                 }
-                self.hp -= mitigated_damage;
+                self.hp -= mitigated_damage as i32;
             }
         }
 

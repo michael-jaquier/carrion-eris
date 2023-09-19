@@ -1,7 +1,73 @@
+use std::collections::HashSet;
 use crate::units::Attributes;
 use crate::CarrionError;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use crate::dice::{Dice, Die, DieObject};
+use crate::enemies::Alignment;
+
+pub enum TraitMutation {
+    FlatIncrease(Vec<DieObject>),
+    FlatDecrease(Vec<DieObject>),
+    MultiplicativeBonus(f64),
+
+
+    Advantage,
+    Disadvantage,
+
+    Repeat(usize),
+    AlignmentBonus(Alignment, TraitMutation),
+
+    CriticalChance(f64),
+    CriticalDamage(f64),
+}
+
+pub struct TraitMutations
+{
+    magic_attack: Vec<TraitMutation>,
+    physical_attack: Vec<TraitMutation>,
+    dodge: Vec<TraitMutation>,
+    suppress: Vec<TraitMutation>,
+    armor: Vec<TraitMutation>
+
+}
+
+impl TraitMutations
+{
+    pub fn push_magic_attack(&mut self, tr: TraitMutation)
+    {
+        self.magic_attack.push(tr)
+    }
+    pub fn push_dodge(&mut self, tr: TraitMutation)
+    {
+        self.dodge.push(tr)
+    }
+    pub fn push_physical_attack(&mut self, tr: TraitMutation)
+    {
+        self.physical_attack.push(tr)
+    }
+    pub fn push_armor(&mut self, tr: TraitMutation)
+    {
+        self.armor.push(tr)
+    }
+    pub fn push_suppress(&mut self, tr: TraitMutation)
+    {
+        self.suppress.push(tr)
+    }
+
+}
+
+impl Default for TraitMutations {
+    fn default() -> Self {
+        Self {
+            magic_attack: vec![],
+            dodge: vec![],
+            armor: vec![],
+            physical_attack: vec![],
+            suppress: vec![],
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash)]
 pub enum CharacterTraits {
@@ -79,6 +145,81 @@ impl CharacterTraits {
             CharacterTraits::Greedy => {}
             CharacterTraits::Keen => {}
         }
+    }
+
+    pub fn apply_traits(&self, traits: HashSet<CharacterTraits>) -> TraitMutations
+    {
+        let mut trait_mutations = TraitMutations::default();
+        for tr in traits {
+            match tr {
+                CharacterTraits::Robust => {
+                    trait_mutations.push_armor(TraitMutation::MultiplicativeBonus(1.1));
+                    trait_mutations.push_armor(TraitMutation::FlatIncrease(vec![Die::D4.into();1]))
+                }
+                CharacterTraits::Nimble => {
+                    trait_mutations.push_dodge(TraitMutation::Advantage);
+                    trait_mutations.push_dodge(TraitMutation::MultiplicativeBonus(1.2))
+                }
+                CharacterTraits::Genius => {
+                    trait_mutations.push_magic_attack(TraitMutation::FlatIncrease(vec![Die::D4.into();3]));
+                    trait_mutations.push_magic_attack(TraitMutation::MultiplicativeBonus(1.15));
+                }
+                CharacterTraits::Lucky => {
+                    trait_mutations.push_armor(TraitMutation::Advantage);
+                    trait_mutations.push_dodge(TraitMutation::Advantage);
+                    trait_mutations.push_suppress(TraitMutation::Advantage);
+                }
+                CharacterTraits::FolkHero => {
+                    trait_mutations.push_magic_attack(TraitMutation::AlignmentBonus(Alignment::ChaoticEvil, TraitMutation::FlatIncrease(vec![Die::D6.into();2])));
+                    trait_mutations.push_magic_attack(TraitMutation::AlignmentBonus(Alignment::NeutralEvil, TraitMutation::FlatIncrease(vec![Die::D6.into();2])));
+                    trait_mutations.push_magic_attack(TraitMutation::AlignmentBonus(Alignment::LawfulEvil, TraitMutation::FlatIncrease(vec![Die::D6.into();2])));
+
+                }
+
+                CharacterTraits::Charismatic => {}
+                CharacterTraits::Strong => {
+                    trait_mutations.push_physical_attack(TraitMutation::FlatIncrease(vec![Die::D4.into();3]));
+                    trait_mutations.push_physical_attack(TraitMutation::MultiplicativeBonus(1.15));
+                }
+
+                CharacterTraits::Hermit => {
+                    trait_mutations.push_suppress(TraitMutation::Advantage);
+                    trait_mutations.push_suppress(TraitMutation::MultiplicativeBonus(1.2));
+                }
+
+                CharacterTraits::Addict => {
+                    trait_mutations.push_dodge(TraitMutation::FlatDecrease(vec![Die::D6.into();2]));
+
+                }
+
+                CharacterTraits::Cursed => {
+                    trait_mutations.push_suppress(TraitMutation::FlatDecrease(vec![Die::D6.into();2]));
+                    trait_mutations.magic_attack(TraitMutation::CriticalDamage(0.85));
+                    trait_mutations.magic_attack(TraitMutation::MultiplicativeBonus(0.9))
+
+                }
+                CharacterTraits::Unlucky => {
+                    trait_mutations.push_suppress(TraitMutation::Disadvantage);
+                    trait_mutations.push_dodge(TraitMutation::Disadvantage);
+                }
+                CharacterTraits::Righteous => {
+                    trait_mutations.push_magic_attack(TraitMutation::AlignmentBonus(Alignment::ChaoticEvil, TraitMutation::FlatIncrease(vec![Die::D6.into();2])));
+                    trait_mutations.push_magic_attack(TraitMutation::AlignmentBonus(Alignment::ChaoticNeutral, TraitMutation::FlatIncrease(vec![Die::D6.into();2])));
+                    trait_mutations.push_magic_attack(TraitMutation::AlignmentBonus(Alignment::ChaoticGood, TraitMutation::FlatIncrease(vec![Die::D6.into();2])));
+
+                }
+                CharacterTraits::Greedy => {}
+                CharacterTraits::Keen => {
+                    trait_mutations.push_magic_attack(TraitMutation::CriticalDamage(1.35));
+                    trait_mutations.push_physical_attack(TraitMutation::CriticalDamage(1.35));
+                    trait_mutations.push_magic_attack(TraitMutation::CriticalChance(1.35));
+                    trait_mutations.push_physical_attack(TraitMutation::CriticalChance(1.35));
+                }
+            }
+        }
+
+
+        trait_mutations
     }
 
     pub fn valid_traits() -> String {

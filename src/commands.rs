@@ -62,8 +62,11 @@ pub async fn character_trait(
                         let created_character = SurrealConsumer::get_character(id)
                             .await?
                             .expect("Failed to create character");
-                        ctx.reply(format!("Updated character: {}", created_character))
-                            .await?;
+                        ctx.send(|b| {
+                            b.content(format!("Updated character: {}", created_character))
+                                .ephemeral(true)
+                        })
+                        .await?;
                     }
                     None => {
                         ctx.reply("Failed to update character").await?;
@@ -126,25 +129,70 @@ pub async fn create(
                         let created_character = SurrealConsumer::get_character(id)
                             .await?
                             .expect("Failed to create character");
-                        ctx.reply(format!("Created character: {}", created_character))
-                            .await?;
+                        ctx.send(|b| {
+                            b.content(format!("Created character: {}", created_character))
+                                .ephemeral(true)
+                        })
+                        .await?;
                     }
                     None => {
-                        ctx.reply("Failed to create character").await?;
+                        ctx.send(|b| {
+                            b.content(format!("Failed to create character"))
+                                .ephemeral(true)
+                        })
+                        .await?;
                     }
                 }
             }
             Err(_) => {
                 let valid_classes = Classes::valid_classes();
-                ctx.reply(format!("Valid classes:\n {}", valid_classes))
-                    .await?;
+                ctx.send(|b| {
+                    b.content(format!(
+                        "Invalid class: {:?}\n Valid Classes:\n {}",
+                        class, valid_classes
+                    ))
+                    .ephemeral(true)
+                })
+                .await?;
             }
         }
     } else {
         let valid_classes = Classes::valid_classes();
-        ctx.reply(format!("Valid classes:\n {}", valid_classes))
-            .await?;
+        ctx.send(|b| {
+            b.content(format!(
+                "No class provided\n Valid Classes:\n {}",
+                valid_classes
+            ))
+            .ephemeral(true)
+        })
+        .await?;
     }
 
+    Ok(())
+}
+
+/// Information about your character
+#[poise::command(prefix_command, slash_command)]
+pub async fn me(
+    ctx: Context<'_>,
+    #[autocomplete = "poise::builtins::autocomplete_command"]
+    #[description = "Create a character form the list of valid classes"]
+    command: Option<String>,
+) -> Result<(), Error> {
+    let user_id = ctx.author().id.0;
+    let character = SurrealConsumer::get_character(user_id).await?;
+    match character {
+        Some(character) => {
+            ctx.send(|b| {
+                b.content(format!("Character: {}", character))
+                    .ephemeral(true)
+            })
+            .await?;
+        }
+        None => {
+            ctx.send(|b| b.content(format!("No character found")).ephemeral(true))
+                .await?;
+        }
+    }
     Ok(())
 }

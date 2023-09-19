@@ -9,7 +9,8 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 use crate::BattleInfo;
-use tracing::{debug, warn};
+use tracing::{debug, info, warn};
+use tracing_subscriber::fmt::init;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BattleResult {
@@ -153,6 +154,7 @@ async fn battle(mut character: &mut Character) -> BattleResult {
         }
         Some(e) => e,
     };
+
     let mut battle_info = vec![];
     while enemy.alive() && character.hp > 0 {
         let result = single_turn(&mut character, &mut enemy).await;

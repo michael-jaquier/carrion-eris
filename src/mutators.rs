@@ -2,38 +2,17 @@ use crate::enemies::{Alignment, Enemy};
 use crate::player::{Character, PlayerAction};
 use crate::traits::CharacterTraits;
 
-use crate::{AdvantageState, Dice, Die, DieObject};
-
+use crate::dice::{AdvantageState, Dice, Die, DieObject};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
-pub struct AttackModifier {
-    pub(crate) base: Dice,
-}
-
-impl AttackModifier {
-    pub fn new(flat: Dice, _multiplier: u32, _crit_chance: Dice, _crit_multiplier: f64) -> Self {
-        Self { base: flat }
-    }
-}
-
-impl Default for AttackModifier {
-    fn default() -> Self {
-        Self {
-            base: Dice::default(),
-        }
-    }
-}
-
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttackModifiers {
-    pub(crate) magic: Option<Dice>,
-    pub(crate) physical: Option<Dice>,
+    magic: Option<Dice>,
+    physical: Option<Dice>,
 }
 
 impl AttackModifiers {
-
     pub fn new(magic: Option<Dice>, physical: Option<Dice>) -> Self {
         Self { magic, physical }
     }
@@ -46,7 +25,6 @@ impl AttackModifiers {
             .apply_vulnerability(enemy, &player.class.action())
             .clone()
     }
-
 
     fn set_advantage_state(&mut self, advantage: AdvantageState) {
         match advantage {
@@ -91,7 +69,6 @@ impl AttackModifiers {
                 } else {
                     self.magic.as_mut().unwrap().add_die(vec![d]);
                 }
-
             }
         } else {
             if let Some(d) = self.physical.as_mut() {
@@ -101,39 +78,47 @@ impl AttackModifiers {
                 d.add_die(die.clone());
             }
         }
-
-
     }
-
 
     fn set_negative_die(&mut self, die: Vec<DieObject>) {
         if self.physical.is_some() && self.magic.is_some() {
             for _d in die {
                 let _choice = thread_rng().gen_bool(0.5);
-
             }
         }
 
-        if let Some(_d) = self.physical.as_mut() {
+        if let Some(_d) = self.physical.as_mut() {}
+        if let Some(_d) = self.magic.as_mut() {}
+    }
 
+    fn lower_critical_targets(&mut self) {
+        if let Some(d) = self.physical.as_mut() {
+            d.dice().iter_mut().for_each(|d| {
+                d.set_critical(-1);
+            });
         }
-        if let Some(_d) = self.magic.as_mut() {
-
+        if let Some(d) = self.magic.as_mut() {
+            d.dice().iter_mut().for_each(|d| {
+                d.set_critical(-1);
+            });
         }
     }
 
-    fn set_critical_targets(&mut self, _target: u32) {
-        if let Some(_d) = self.physical.as_mut() {
-
+    fn set_critical_die(&mut self, die: Die) {
+        if let Some(d) = self.physical.as_mut() {
+            d.dice().iter_mut().for_each(|d| {
+                d.set_critical_die(die.clone());
+            });
         }
-        if let Some(_d) = self.magic.as_mut() {
-
+        if let Some(d) = self.magic.as_mut() {
+            d.dice().iter_mut().for_each(|d| {
+                d.set_critical_die(die.clone());
+            });
         }
     }
-
 
     fn apply_skill_base(&mut self, action: &PlayerAction) -> &mut AttackModifiers {
-        let (a,b) = action.action_base_damage();
+        let (a, b) = action.action_base_damage();
         self.physical = a;
         self.magic = b;
         self
@@ -155,8 +140,9 @@ impl AttackModifiers {
         player: &Character,
         action: &PlayerAction,
     ) -> &mut AttackModifiers {
-        let _attribute = action.action_attribute_modifiers(player) % 10;
-
+        let default_scale = |n: u32| (1.5_f64.powf((n as f64).ln())) as u32;
+        let n = action.action_attribute_modifiers(player);
+        self.add_existing_die(vec![Die::D6.into(); default_scale(n) as usize]);
         self
     }
 
@@ -168,9 +154,8 @@ impl AttackModifiers {
         let vulnerability = enemy.kind.vulnerability();
         let action_element = action.action_element();
         if action_element.contains(&vulnerability) {
-           self.add_existing_die(vec![Die::D4.into(); 2])
+            self.add_existing_die(vec![Die::D4.into(); 2])
         }
-
         self
     }
 
@@ -190,9 +175,13 @@ impl AttackModifiers {
                 CharacterTraits::Strong => self.add_physical_die(vec![Die::D4.into(); 3]),
                 CharacterTraits::Hermit => {}
                 CharacterTraits::Addict => self.set_negative_die(vec![Die::D4.into(); 2]),
-                CharacterTraits::Cursed => self.set_negative_die(vec![Die::D4.into(); 2]),
+                CharacterTraits::Cursed => {
+                    self.set_negative_die(vec![Die::D4.into(); 2]);
+                    self.set_critical_die(Die::D100);
+                }
                 CharacterTraits::Unlucky => {
                     self.set_advantage_state(AdvantageState::Disadvantage);
+                    self.set_critical_die(Die::D100);
                 }
                 CharacterTraits::Righteous => match enemy.kind.alignment() {
                     Alignment::LawfulEvil => self.add_existing_die(vec![Die::D4.into(); 2]),
@@ -202,19 +191,18 @@ impl AttackModifiers {
                 },
                 CharacterTraits::Greedy => {}
                 CharacterTraits::Keen => {
-                    self.set_critical_targets(18);
+                    self.lower_critical_targets();
+                    self.lower_critical_targets();
                 }
             }
         }
         self
     }
 
-
-
     fn physical_range(&self) -> u32 {
         if let Some(physical) = &self.physical {
             let mut rng = thread_rng();
-            let phys = physical.roll_sum();
+            let phys = physical.roll();
             return rng.gen_range(phys..phys * 2);
         }
         0
@@ -223,7 +211,7 @@ impl AttackModifiers {
     fn magical_range(&self) -> u32 {
         if let Some(magical) = &self.magic {
             let mut rng = thread_rng();
-            let magic = magical.roll_sum();
+            let magic = magical.roll();
             return rng.gen_range(magic..magic * 2);
         }
         0
@@ -306,5 +294,29 @@ impl From<&mut Character> for DefenseModifiers {
             magical,
             physical,
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::classes::Classes;
+    use crate::mutators::AttackModifiers;
+    use crate::player::{Character};
+
+    #[test]
+    fn magic_missile_dps() {
+        let mut player = Character::new("test".to_string(), 1, Classes::Wizard);
+
+        let enemy = crate::enemies::Enemy::weak(crate::enemies::Mob::Orc, 1);
+        let mut attack = AttackModifiers::builder(&player, &enemy);
+
+        let ten_thousand_rolls = (0..10000)
+            .map(|_| attack.generate_damage_values())
+            .collect::<Vec<u32>>();
+        let average =
+            ten_thousand_rolls.iter().sum::<u32>() as f64 / ten_thousand_rolls.len() as f64;
+
+        assert!(average > 0f64);
+        assert!(average < 100f64);
     }
 }

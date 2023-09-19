@@ -25,14 +25,6 @@ impl Classes {
             Classes::Sorcerer => PlayerAction::FireBall,
         }
     }
-
-    pub fn hp_gain(&self, level: u32) -> u32 {
-        match self {
-            Classes::Warrior => 100 + (level * 25),
-            Classes::Wizard => 75 + (level * 10),
-            Classes::Sorcerer => 75 + (level * 15),
-        }
-    }
 }
 
 impl TryFrom<String> for Classes {

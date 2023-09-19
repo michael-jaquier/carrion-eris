@@ -1,3 +1,4 @@
+use crate::dice::{Dice, Die};
 use crate::player::Character;
 use crate::units::Attribute;
 use crate::units::Attributes;
@@ -6,6 +7,8 @@ use rand::prelude::{Distribution, SliceRandom};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+
+use tracing::log::info;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AttackType {
@@ -58,8 +61,8 @@ pub struct Enemy {
     pub(crate) level: u32,
     pub(crate) experience: u32,
     pub(crate) health: i32,
-    pub(crate) defense: u32,
-    pub(crate) resistance: u32,
+    pub(crate) defense: Dice,
+    pub(crate) resistance: Dice,
     pub(crate) gold: u32,
     pub(crate) attributes: Attributes,
     pub(crate) items: Vec<Item>,
@@ -96,15 +99,27 @@ impl Enemy {
         let ranges = 1..(level * 10);
         rng.gen_range(ranges)
     }
+
+    fn super_logarithm_scaling(level: u32) -> u32 {
+        let default_scale = |n: u32| ((n as f64).ln().powf(2.0)).floor() as u32 + level * 10;
+        default_scale(level)
+    }
+
+    fn dice_scaling_log(level: u32) -> Dice {
+        Dice::new(vec![
+            Die::D20.into();
+            Enemy::super_logarithm_scaling(level) as usize
+        ])
+    }
     pub fn weak(mob: Mob, level: u32) -> Enemy {
         Enemy {
             kind: mob.clone(),
             level,
             experience: Enemy::linear_scaling(level),
-            health: Enemy::ranges(level) as i32,
-            defense: Enemy::ranges(level),
-            resistance: Enemy::ranges(level),
-            gold: Enemy::ranges(level),
+            health: Enemy::super_logarithm_scaling(level) as i32,
+            defense: Dice::new(vec![Die::D20.into(); 5].into()),
+            resistance: Dice::new(vec![Die::D20.into(); 5].into()),
+            gold: Enemy::super_logarithm_scaling(level),
             attributes: (&mob).into(),
             items: vec![],
             state: EnemyState::Alive,
@@ -142,10 +157,10 @@ impl Default for Enemy {
             level: 1,
             experience: 0,
             health: 0,
-            defense: 0,
-            resistance: 0,
+            defense: Default::default(),
+            resistance: Default::default(),
             gold: 0,
-            attributes: Attributes::default(),
+            attributes: Default::default(),
             items: vec![],
             state: EnemyState::Alive,
             actions: vec![],
@@ -189,7 +204,6 @@ impl Mob {
         let level_range = thread_rng().gen_range(character.level..character.level + 5);
         match self {
             Mob::Orc => Enemy::weak(Mob::Orc, level_range).set_actions(self.actions()),
-
             Mob::Elf => Enemy::weak(Mob::Elf, level_range)
                 .set_actions(self.actions())
                 .set_experience_multiple(4),
@@ -247,18 +261,31 @@ pub enum MobAction {
 
 impl MobAction {
     pub fn act(&self, enemy: &Enemy) -> AttackType {
+        let attack_dice = |d, n| Dice::new(vec![d; n]);
+        let die = |attribute: Attribute, level| {
+            let default_scale = |n: u32| ((n as f64).ln().powf(2.0)).floor() as u32;
+            (default_scale(attribute.inner()) as usize + default_scale(level) as usize).min(1)
+        };
         match self {
             MobAction::Bite => AttackType::Physical(
-                thread_rng().gen_range(1..2 * enemy.level) + *enemy.attributes.strength,
+                attack_dice(Die::D20.into(), die(enemy.attributes.strength, enemy.level)).roll(),
             ),
             MobAction::Claw => AttackType::Physical(
-                thread_rng().gen_range(1..2 * enemy.level) + *enemy.attributes.strength,
+                attack_dice(
+                    Die::D6.into(),
+                    3 * die(enemy.attributes.dexterity, enemy.level),
+                )
+                .roll(),
             ),
             MobAction::Stab => AttackType::Physical(
-                thread_rng().gen_range(1..2 * enemy.level) + *enemy.attributes.dexterity,
+                attack_dice(
+                    Die::D12.into(),
+                    2 * die(enemy.attributes.dexterity, enemy.level),
+                )
+                .roll(),
             ),
             MobAction::FireBall => AttackType::Magical(
-                thread_rng().gen_range(1..15 * enemy.level) + *enemy.attributes.intelligence,
+                attack_dice(Die::D20.into(), die(enemy.attributes.strength, enemy.level)).roll(),
             ),
         }
     }

@@ -1,18 +1,19 @@
 use crate::enemies::{AttackType, DamageType, Enemy, EnemyState};
-use crate::{BattleInfo, Dice, Die};
+use crate::BattleInfo;
 
 use serde::{Deserialize, Serialize};
 
 use crate::classes::Classes;
 use crate::mutators::{AttackModifiers, DefenseModifiers};
 use crate::traits::CharacterTraits;
-use crate::units::{Attributes};
+use crate::units::Attributes;
 use std::collections::HashSet;
 
-use std::fmt::{Display, Formatter};
+use std::fmt::{write, Display, Formatter};
 
+use crate::dice::{Dice, Die};
 use tracing::log::debug;
-use tracing::warn;
+use tracing::{info, warn};
 
 pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
@@ -59,17 +60,22 @@ impl PlayerAction {
         }
     }
 
-    pub fn action_base_damage(&self) -> (Option<Dice>, Option<Dice>) {
+    pub fn action_base_damage(&self) -> ActionDice {
         let attack_dice = |d, n| Dice::new(vec![d; n]);
         match self {
-            PlayerAction::Slash => (Some(attack_dice(Die::D20.into(), 1)), None),
-            PlayerAction::MagicMissile => (None, Some(attack_dice(Die::D4.into(), 5))),
-            PlayerAction::FireBall => {
-                (
-                    Some(attack_dice(Die::D4.into(), 2)),
-                    Some(attack_dice(Die::D12.into(), 1)),
-                )
+            PlayerAction::Slash => (Some(attack_dice(Die::D20.into(), 2)), None),
+            PlayerAction::MagicMissile => {
+                let mut magical_die = attack_dice(Die::D4.into(), 7);
+                magical_die.dice().iter_mut().for_each(|d| {
+                    d.set_critical_die(Die::D4);
+                    d.increase_critical_multiplier(0.75);
+                });
+                (None, Some(magical_die))
             }
+            PlayerAction::FireBall => (
+                Some(attack_dice(Die::D4.into(), 3)),
+                Some(attack_dice(Die::D12.into(), 3)),
+            ),
         }
     }
 
@@ -111,7 +117,11 @@ impl Character {
         (self.level as f64 * (self.level as f64).ln()) as u32 + self.level * 100
     }
     pub fn new(name: String, user_id: u64, class: Classes) -> Self {
-        let max_hp = class.hp_gain(1);
+        let max_hp = match class {
+            Classes::Warrior => 20,
+            Classes::Wizard => 10,
+            Classes::Sorcerer => 10,
+        };
         Self {
             level: 1,
             name,
@@ -126,9 +136,19 @@ impl Character {
         }
     }
 
+    pub fn hp_gain(&self, level: u32) -> u32 {
+        let constitution = self.attributes.constitution.inner();
+        let hp_gain = match self.class {
+            Classes::Warrior => (constitution * 10) + 10,
+            Classes::Wizard => (constitution * 3) + 5,
+            Classes::Sorcerer => (constitution * 3) + 5,
+        };
+        hp_gain + self.max_hp
+    }
+
     pub fn level_up(&mut self) {
         self.level += 1;
-        self.max_hp = self.class.hp_gain(self.level);
+        self.max_hp = self.hp_gain(self.level);
         self.hp = self.max_hp as i32;
         self.experience = self
             .experience
@@ -142,7 +162,14 @@ impl Character {
 
     pub fn player_attack(&mut self, enemy: &mut Enemy) -> BattleInfo {
         let action = self.class.action();
-        let damage = action.act(&self, enemy);
+        let mut damage = action.act(&self, enemy);
+
+        if enemy.defense.success() {
+            let suppress = (enemy.defense.roll()).min(90);
+            let suppress_quantity = damage as f64 * suppress as f64 / 100.0;
+            damage -= suppress_quantity as u32;
+        }
+
         enemy.health -= damage as i32;
         debug!(
             "{} attacked {} for {} damage! {} has {} hp",
@@ -182,37 +209,30 @@ impl Character {
     pub fn enemy_attack(&mut self, enemy: &Enemy) {
         let action = enemy.action();
         let defense: DefenseModifiers = self.into();
+        if defense.dodge.success() {
+            return;
+        }
+
+        let mitigate =
+            |n, dice: Dice| (n as f64 - (n as f64 * ((dice.roll()).min(90) as f64 / 100.0))) as i32;
         match action {
             AttackType::Physical(damage) => {
-                let dodge = defense.physical.success();
-                if dodge {
-                    debug!("{} dodged the attack!", self.name);
-                } else {
-                    self.hp -= damage as i32;
-                    debug!(
-                        "{} was attacked by {} for {} damage! {} has {} hp",
-                        self.name, enemy.kind, damage, self.name, self.hp
-                    )
+                let mitigated_damage = mitigate(damage, defense.physical);
+                if mitigated_damage < 0 {
+                    warn!("{} has negative Physical damage!", self.name);
                 }
+                self.hp -= mitigated_damage;
             }
 
             AttackType::Magical(damage) => {
-                if defense.magical.success() {
-                    let suppress_quantity = (defense.magical.roll_sum()).min(95) as f64 / 100.0;
-                    let suppressed_damage = damage as f64 * suppress_quantity;
-                    let damage = (damage as f64 - suppressed_damage) as i32;
-                    if damage < 0 {
-                        warn!(
-                            "Magic Damage is negative! {} suppress_quantity {}",
-                            damage, suppress_quantity
-                        )
-                    }
-                    self.hp -= damage;
-                } else {
-                    self.hp -= damage as i32;
+                let mitigated_damage = mitigate(damage, defense.magical);
+                if mitigated_damage < 0 {
+                    warn!("{} has negative Magical damage!", self.name);
                 }
+                self.hp -= mitigated_damage;
             }
         }
+
         if self.hp > self.max_hp as i32 {
             warn!("{} has more hp than max hp!", self.name);
             self.hp = self.max_hp as i32;
@@ -223,11 +243,22 @@ impl Character {
 
 impl Display for Character {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "name: {}\n level: {}\n class {}",
-            self.name, self.level, self.class
-        )
+        let mut string = String::new();
+        string.push_str("```");
+        string.push_str("\n");
+        string.push_str(&format!("Name: {}\n", self.name));
+        string.push_str(&format!("Level: {}\n", self.level));
+        string.push_str(&format!("Class: {}\n", self.class));
+        string.push_str(&format!("HP: {}/{}\n", self.hp, self.max_hp));
+        string.push_str(&format!("Experience: {}\n", self.experience));
+        string.push_str(&format!("Attributes: {}\n", self.attributes));
+        string.push_str(&format!("Traits:\n",));
+        for tr in &self.traits {
+            string.push_str(&format!("\t{}\n", tr));
+        }
+        string.push_str("\n");
+        string.push_str("```");
+        write!(f, "{}", string)
     }
 }
 

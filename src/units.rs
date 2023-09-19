@@ -1,6 +1,7 @@
 use crate::classes::Classes;
 use crate::enemies::Mob;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::ops::{Add, Deref, Sub};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -11,6 +12,21 @@ pub struct Attributes {
     pub(crate) constitution: Attribute,
     pub(crate) wisdom: Attribute,
     pub(crate) charisma: Attribute,
+}
+
+impl Display for Attributes {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}\n\t{}",
+            self.strength,
+            self.intelligence,
+            self.dexterity,
+            self.constitution,
+            self.wisdom,
+            self.charisma
+        )
+    }
 }
 
 impl From<&Classes> for Attributes {
@@ -58,10 +74,10 @@ impl Default for Attributes {
         Self {
             strength: Attribute::Strength(7),
             intelligence: Attribute::Intelligence(7),
-            dexterity: Attribute::Dexterity(0),
-            constitution: Attribute::Constitution(0),
-            wisdom: Attribute::Wisdom(0),
-            charisma: Attribute::Charisma(0),
+            dexterity: Attribute::Dexterity(7),
+            constitution: Attribute::Constitution(7),
+            wisdom: Attribute::Wisdom(7),
+            charisma: Attribute::Charisma(7),
         }
     }
 }
@@ -89,6 +105,19 @@ pub enum Attribute {
     Constitution(u32),
     Wisdom(u32),
     Charisma(u32),
+}
+
+impl Display for Attribute {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Attribute::Strength(v) => write!(f, "Strength: {}", v),
+            Attribute::Intelligence(v) => write!(f, "Intelligence: {}", v),
+            Attribute::Dexterity(v) => write!(f, "Dexterity: {}", v),
+            Attribute::Constitution(v) => write!(f, "Constitution: {}", v),
+            Attribute::Wisdom(v) => write!(f, "Wisdom: {}", v),
+            Attribute::Charisma(v) => write!(f, "Charisma {}", v),
+        }
+    }
 }
 
 impl Attribute {

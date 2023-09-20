@@ -130,9 +130,9 @@ impl AttackModifiers {
     }
 
     fn apply_skill_base(&mut self, action: &PlayerAction) -> &mut AttackModifiers {
-        let (a, b) = action.action_base_damage();
-        self.physical = a;
-        self.magic = b;
+        let action_die = action.action_base_damage();
+        self.physical = action_die.physical.clone();
+        self.magic = action_die.magical.clone();
         self
     }
 
@@ -163,9 +163,10 @@ impl AttackModifiers {
         action: &PlayerAction,
     ) -> &mut AttackModifiers {
         if let Some(vulnerability) = enemy.kind.vulnerability() {
-            let action_element = action.action_element();
-            if action_element.contains(&vulnerability) {
-                self.add_existing_die(vec![Die::D4.into(); 2])
+            if let Some(action_element) =  crate::ElementalScaling::scaling(action) {
+                if action_element == vulnerability {
+                    self.add_existing_die(vec![Die::D4.into(); 2])
+                }
             }
         }
         self

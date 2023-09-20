@@ -3,6 +3,7 @@ use crate::enemies::Mob;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::{Add, Deref, Sub};
+use crate::AttributeScaling;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Attributes {
@@ -13,6 +14,7 @@ pub struct Attributes {
     pub(crate) wisdom: Attribute,
     pub(crate) charisma: Attribute,
 }
+
 
 impl Display for Attributes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -39,6 +41,17 @@ impl Attributes {
         self.wisdom.plus(default_scale(level));
         self.charisma.plus(default_scale(level));
         self
+    }
+
+    pub fn get(&self, attr: &Attribute) -> u32 {
+        match attr {
+            Attribute::Strength(_) => self.strength.inner(),
+            Attribute::Intelligence(_) => self.intelligence.inner(),
+            Attribute::Dexterity(_) => self.dexterity.inner(),
+            Attribute::Constitution(_) => self.constitution.inner(),
+            Attribute::Wisdom(_) => self.wisdom.inner(),
+            Attribute::Charisma(_) => self.charisma.inner(),
+        }
     }
 }
 
@@ -128,6 +141,14 @@ pub enum Attribute {
     Charisma(u32),
 }
 
+impl From<&str> for Attribute {
+    fn from(s: &str) -> Self {
+        Attribute::from_text(s).unwrap()
+    }
+}
+
+
+
 impl Display for Attribute {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -142,6 +163,18 @@ impl Display for Attribute {
 }
 
 impl Attribute {
+
+    fn from_text(s: &str) -> Result<Attribute, ()> {
+        match s.to_lowercase().as_str() {
+            "strength" => Ok(Attribute::Strength(0)),
+            "intelligence" => Ok(Attribute::Intelligence(0)),
+            "dexterity" => Ok(Attribute::Dexterity(0)),
+            "constitution" => Ok(Attribute::Constitution(0)),
+            "wisdom" => Ok(Attribute::Wisdom(0)),
+            "charisma" => Ok(Attribute::Charisma(0)),
+            _ => Err(()),
+        }
+    }
     pub fn absolute_difference(&self, other: &Self) -> i32 {
         **self as i32 - **other as i32
     }
@@ -239,6 +272,25 @@ pub enum DamageType {
     Holy,
     NonElemental,
     Physical,
+}
+
+impl From<&str> for DamageType {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "fire" => DamageType::Fire,
+            "water" => DamageType::Water,
+            "earth" => DamageType::Earth,
+            "air" => DamageType::Air,
+            "light" => DamageType::Light,
+            "dark" => DamageType::Dark,
+            "iron" => DamageType::Iron,
+            "arcane" => DamageType::Arcane,
+            "holy" => DamageType::Holy,
+            "nonelemental" => DamageType::NonElemental,
+            "physical" => DamageType::Physical,
+            _ => panic!("Invalid damage type"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash)]

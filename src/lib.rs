@@ -25,6 +25,7 @@ use thiserror::Error;
 use crate::player::PlayerAction;
 
 use std::fmt::{Display, Formatter};
+use crate::units::DamageType;
 
 #[derive(Error, Debug)]
 pub enum CarrionError {
@@ -125,4 +126,12 @@ impl Display for BattleInfo {
         string.push_str("\n🗡️\n");
         write!(f, "{}", string)
     }
+}
+
+trait AttributeScaling {
+    fn scaling(&self) -> Option<crate::units::Attribute>;
+}
+
+trait ElementalScaling {
+    fn scaling(&self) -> Option<crate::units::DamageType>;
 }

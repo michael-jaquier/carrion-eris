@@ -1,44 +1,88 @@
 use crate::enemies::{Enemy, EnemyState};
-use crate::BattleInfo;
+use crate::{AttributeScaling, BattleInfo, ElementalScaling};
 
 use serde::{Deserialize, Serialize};
 
 use crate::classes::Classes;
 use crate::mutators::{AttackModifiers, DefenseModifiers};
 use crate::traits::{CharacterTraits, TraitMutations};
-use crate::units::{AttackType, Attributes};
+use crate::units::{AttackType, Attribute, Attributes};
 use std::collections::HashSet;
 
-use std::fmt::{Display, Formatter};
+use eris_macro::{ErisTitleCase, AttributeScaling, ElementalScaling};
+use std::fmt::Display;
+use heck::ToTitleCase;
+use serenity::model::guild::automod::ActionType;
 
-use crate::dice::{Dice, Die};
+use crate::dice::{AdvantageState, Dice, Die};
 use crate::units::DamageType;
 use tracing::log::debug;
-use tracing::warn;
+use tracing::{Instrument, warn};
 
 pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
 pub type PhysicalDice = Option<Dice>;
-pub type ActionDice = (PhysicalDice, MagicalDice);
 
 
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum PlayerAction {
-    Slash,
-    MagicMissile,
-    FireBall,
+pub struct ActionDice {
+    pub physical: Option<Dice>,
+    pub magical: Option<Dice>,
 }
 
-impl Display for PlayerAction {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            PlayerAction::Slash => write!(f, "Slash"),
-            PlayerAction::MagicMissile => write!(f, "Magic Missile"),
-            PlayerAction::FireBall => write!(f, "Fire Ball"),
+
+impl ActionDice {
+    pub fn set_critical_state(&mut self, state: AdvantageState) {
+        if let Some(dice) = &mut self.physical {
+            dice.set_critical_advantage(state)
+        }
+        if let Some(dice) = &mut self.magical {
+            dice.set_critical_advantage(state)
+        }
+    }
+
+    pub fn set_critical_target(&mut self, target: i32) {
+        if let Some(dice) = &mut self.physical {
+            dice.set_critical_target(target)
+        }
+        if let Some(dice) = &mut self.magical {
+            dice.set_critical_target(target)
+        }
+    }}
+impl Default for ActionDice {
+    fn default() -> Self {
+        Self {
+            physical: None,
+            magical: None,
         }
     }
 }
+
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, AttributeScaling, ElementalScaling)]
+pub enum PlayerAction {
+    #[stat("intelligence")]
+    #[element("physical")]
+    Slash,
+    #[element("arcane")]
+    #[stat("intelligence")]
+    MagicMissile,
+    #[element("fire")]
+    #[stat("intelligence")]
+    FireBall,
+    #[element("water")]
+    #[stat("intelligence")]
+    WaterBall,
+}
+
+impl Display for PlayerAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let string = format!("{:?}", self);
+        write!(f, "{}", string.to_title_case())
+    }
+}
+
+
 
 impl PlayerAction {
     pub fn damage(&self, modifiers: AttackModifiers) -> u32 {
@@ -49,54 +93,75 @@ impl PlayerAction {
         self.damage(AttackModifiers::builder(player, enemy))
     }
 
-    pub fn action_element(&self) -> Vec<DamageType> {
-        match self {
-            PlayerAction::Slash => {
-                vec![DamageType::Physical]
-            }
-            PlayerAction::MagicMissile => {
-                vec![DamageType::Arcane]
-            }
-            PlayerAction::FireBall => {
-                vec![DamageType::Fire]
-            }
-        }
-    }
-
     pub fn action_base_damage(&self) -> ActionDice {
-        let attack_dice = |d, n| Dice::new(vec![d; n]);
-        match self {
-            PlayerAction::Slash => (Some(attack_dice(Die::D20.into(), 1)), None),
-            PlayerAction::MagicMissile => {
-                let mut magical_die = attack_dice(Die::D4.into(), 4);
-                magical_die.dice().iter_mut().for_each(|d| {
-                    d.set_critical_die(Die::D4);
-                    d.increase_critical_multiplier(0.75);
-                });
-                (None, Some(magical_die))
+        let mut base_die = ActionDice::default();
+        if let Some(attribute) = AttributeScaling::scaling(self) {
+             match attribute {
+                Attribute::Strength(_) => {
+                    base_die.physical = Some(Dice::new(vec![Die::D20.into(); 1]));
+                }
+                Attribute::Intelligence(_) => {
+                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 4]));
+
+                }
+                Attribute::Dexterity(_) => {
+                    base_die.physical = Some(Dice::new(vec![Die::D12.into(); 2]));
+
+                }
+                Attribute::Constitution(_) => {
+                    base_die.physical = Some(Dice::new(vec![Die::D4.into(); 2]));
+                    base_die.magical = Some(Dice::new(vec![Die::D4.into(); 4]));
+
+                }
+                Attribute::Wisdom(_) => {
+                    base_die.magical = Some(Dice::new(vec![Die::D6.into(); 4]));
+                }
+                Attribute::Charisma(_) => {
+                    base_die.magical = Some(Dice::new(vec![Die::D8.into(); 3]));
+                }
+            };
+        };
+        if let Some(elemental) = ElementalScaling::scaling(self) {
+            match elemental {
+                DamageType::Fire => {
+                    base_die.set_critical_state(AdvantageState::Advantage);
+
+                }
+                DamageType::Water => {
+                }
+                DamageType::Earth => {}
+                DamageType::Air => {}
+                DamageType::Light => {}
+                DamageType::Dark => {}
+                DamageType::Iron => {}
+                DamageType::Arcane => {}
+                DamageType::Holy => {
+                    base_die.set_critical_state(AdvantageState::Advantage);
+                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 2]));
+                }
+                DamageType::NonElemental => {}
+                DamageType::Physical => {}
             }
-            PlayerAction::FireBall => (
-                Some(attack_dice(Die::D4.into(), 1)),
-                Some(attack_dice(Die::D12.into(), 2)),
-            ),
         }
+
+      base_die
     }
 
     pub fn action_attribute_modifiers(&self, player: &Character) -> u32 {
         let default_scale = |n: u32| ((n as f64).ln().powf(1.1)).floor() as u32;
-        match self {
-            PlayerAction::Slash => default_scale(player.attributes.strength.inner()),
-            PlayerAction::MagicMissile => default_scale(player.attributes.charisma.inner()),
-            PlayerAction::FireBall => default_scale(player.attributes.intelligence.inner()),
+        let attribute =  AttributeScaling::scaling(self);
+        if let Some(attribute) = attribute {
+            let attribute_value = player.attributes.get(&attribute);
+            default_scale(attribute_value)
+        } else {
+            1
         }
     }
 
     pub fn action_level_scaling(&self, n: u32) -> u32 {
         let default_scale = ((n as f64).ln().powf(1.1)).floor() as u32;
         match self {
-            PlayerAction::Slash => default_scale,
-            PlayerAction::MagicMissile => default_scale,
-            PlayerAction::FireBall => default_scale,
+            _ => default_scale,
         }
     }
 }
@@ -114,6 +179,7 @@ pub struct Character {
     pub(crate) traits: HashSet<CharacterTraits>,
     pub(crate) available_traits: u32,
 }
+
 
 impl Default for Character {
     fn default() -> Self {
@@ -286,7 +352,12 @@ impl Display for Character {
 
 #[cfg(test)]
 mod test {
+    use crate::AttributeScaling;
+    use crate::ElementalScaling;
     use crate::mutators::AttackModifiers;
+    use crate::units::Attribute::Intelligence;
+    use crate::units::DamageType::Arcane;
+
 
     #[test]
     fn attack_modifiers() {
@@ -294,4 +365,23 @@ mod test {
         let damage = attack_modifiers.generate_damage_values();
         assert!(damage > 0);
     }
+
+    #[test]
+    fn player_action_print() {
+        use crate::player::PlayerAction;
+        let action = PlayerAction::MagicMissile;
+        assert_eq!(action.to_string(), "Magic Missile");
+    }
+
+    #[test]
+    fn player_action_attributes() {
+        use crate::player::PlayerAction;
+        use crate::classes::Classes;
+        let action = PlayerAction::MagicMissile;
+        let element = ElementalScaling::scaling(&action);
+        let attribute =  AttributeScaling::scaling(&action);
+       assert_eq!(element, Some(Arcane));
+        assert_eq!(attribute, Some(Intelligence(0)));
+    }
+
 }

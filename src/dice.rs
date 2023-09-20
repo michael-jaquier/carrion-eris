@@ -69,13 +69,8 @@ impl DieObject {
         self
     }
 
-    pub fn set_critical_advantage(&mut self) -> &mut DieObject {
-        self.advantage.transition(AdvantageState::Advantage);
-        self
-    }
-
-    pub fn set_critical_disadvantage(&mut self) -> &mut DieObject {
-        self.advantage.transition(AdvantageState::Disadvantage);
+    pub fn set_critical_advantage(&mut self, advantage: AdvantageState) -> &mut DieObject {
+        self.advantage.transition(advantage);
         self
     }
 }
@@ -240,13 +235,19 @@ impl Dice {
         self.dice.iter_mut().for_each(|d| d.set_success(success));
     }
 
-    pub fn set_critical(&mut self, critical: i32) {
+    pub fn set_critical_target(&mut self, critical: i32) {
         self.dice.iter_mut().for_each(|d| d.set_critical(critical));
     }
 
-    pub fn set_critical_advantage(&mut self) {
+    pub fn set_critical_multiplier(&mut self, multiplier: f64) {
+        self.dice
+            .iter_mut()
+            .for_each(|d| d.set_critical_multiplier(multiplier));
+    }
+
+    pub fn set_critical_advantage(&mut self, advantage: AdvantageState) {
         self.dice.iter_mut().for_each(|d| {
-            d.set_critical_advantage();
+            d.set_critical_advantage(advantage);
         });
     }
 }

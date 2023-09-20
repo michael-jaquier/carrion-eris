@@ -1,6 +1,6 @@
-use crate::enemies::{Alignment, Enemy};
+use crate::enemies::Enemy;
 use crate::player::{Character, PlayerAction};
-use crate::traits::{CharacterTraits, TraitMutation};
+use crate::traits::{TraitMutation, TraitMutations};
 use std::ops::Div;
 
 use crate::dice::{AdvantageState, Dice, Die, DieObject};
@@ -11,18 +11,29 @@ use serde::{Deserialize, Serialize};
 pub struct AttackModifiers {
     magic: Option<Dice>,
     physical: Option<Dice>,
+    player: Character,
+    enemy: Enemy,
 }
 
 impl AttackModifiers {
-    pub fn new(magic: Option<Dice>, physical: Option<Dice>) -> Self {
-        Self { magic, physical }
+    pub fn new(
+        magic: Option<Dice>,
+        physical: Option<Dice>,
+        player: &Character,
+        enemy: &Enemy,
+    ) -> Self {
+        Self {
+            magic,
+            physical,
+            player: player.clone(),
+            enemy: enemy.clone(),
+        }
     }
     pub fn builder(player: &Character, enemy: &Enemy) -> AttackModifiers {
-        AttackModifiers::default()
+        AttackModifiers::new(None, None, player, enemy)
             .apply_skill_base(&player.class.action())
             .apply_level_scaling(player, &player.class.action())
             .apply_attributes(enemy, player, &player.class.action())
-            .apply_traits(player, enemy)
             .apply_vulnerability(enemy, &player.class.action())
             .clone()
     }
@@ -141,9 +152,8 @@ impl AttackModifiers {
         player: &Character,
         action: &PlayerAction,
     ) -> &mut AttackModifiers {
-        let default_scale = |n: u32| (1.5_f64.powf((n as f64).ln())) as u32;
         let n = action.action_attribute_modifiers(player);
-        self.add_existing_die(vec![Die::D6.into(); default_scale(n) as usize]);
+        self.add_existing_die(vec![Die::D6.into(); n as usize]);
         self
     }
 
@@ -152,68 +162,70 @@ impl AttackModifiers {
         enemy: &Enemy,
         action: &PlayerAction,
     ) -> &mut AttackModifiers {
-        let vulnerability = enemy.kind.vulnerability();
-        let action_element = action.action_element();
-        if action_element.contains(&vulnerability) {
-            self.add_existing_die(vec![Die::D4.into(); 2])
-        }
-        self
-    }
-
-    fn apply_traits(&mut self, player: &Character, enemy: &Enemy) -> &mut AttackModifiers {
-        for tr in player.traits.iter() {
-            match tr {
-                CharacterTraits::Robust => {}
-                CharacterTraits::Nimble => {}
-                CharacterTraits::Genius => self.add_magical_die(vec![Die::D4.into(); 3]),
-                CharacterTraits::Lucky => self.set_advantage_state(AdvantageState::Advantage),
-                CharacterTraits::FolkHero => match enemy.kind.alignment() {
-                    Alignment::ChaoticEvil => self.add_existing_die(vec![Die::D4.into(); 2]),
-                    Alignment::ChaoticNeutral => self.add_existing_die(vec![Die::D4.into(); 2]),
-                    _ => {}
-                },
-                CharacterTraits::Charismatic => {}
-                CharacterTraits::Strong => self.add_physical_die(vec![Die::D4.into(); 3]),
-                CharacterTraits::Hermit => {}
-                CharacterTraits::Addict => self.set_negative_die(vec![Die::D4.into(); 2]),
-                CharacterTraits::Cursed => {
-                    self.set_negative_die(vec![Die::D4.into(); 2]);
-                    self.set_critical_die(Die::D100);
-                }
-                CharacterTraits::Unlucky => {
-                    self.set_advantage_state(AdvantageState::Disadvantage);
-                    self.set_critical_die(Die::D100);
-                }
-                CharacterTraits::Righteous => match enemy.kind.alignment() {
-                    Alignment::LawfulEvil => self.add_existing_die(vec![Die::D4.into(); 2]),
-                    Alignment::NeutralEvil => self.add_existing_die(vec![Die::D4.into(); 2]),
-                    Alignment::ChaoticEvil => self.add_existing_die(vec![Die::D4.into(); 2]),
-                    _ => {}
-                },
-                CharacterTraits::Greedy => {}
-                CharacterTraits::Keen => {
-                    self.lower_critical_targets();
-                    self.lower_critical_targets();
-                }
+        if let Some(vulnerability) = enemy.kind.vulnerability() {
+            let action_element = action.action_element();
+            if action_element.contains(&vulnerability) {
+                self.add_existing_die(vec![Die::D4.into(); 2])
             }
         }
         self
     }
 
+    fn apply_traits(&self, enemy: &Enemy, base: &Dice, mutations: &Vec<TraitMutation>) -> f64 {
+        let advantage = TraitMutations::advantage(&mutations);
+        let critical_advantage = TraitMutations::critical_advantage(&mutations);
+        let critical_multiplier = TraitMutations::critical_multiplier(&mutations);
+        let multi = TraitMutations::multi(&mutations);
+        let map_unique = |d: Dice, ad: AdvantageState| {
+            let mut d = d;
+            d.set_critical_advantage(critical_advantage.into());
+            d.set_critical_multiplier(critical_multiplier);
+            d.set_advantage(ad);
+            d.roll() as f64 * multi
+        };
+        let mut rolls = map_unique(base.clone(), advantage.into());
+
+        for tr in mutations {
+            match tr {
+                TraitMutation::FlatIncrease(e) => {
+                    rolls += map_unique(Dice::new(e.clone()), advantage.into());
+                }
+                TraitMutation::FlatDecrease(e) => {
+                    rolls -= map_unique(Dice::new(e.clone()), (advantage * -1).into());
+                }
+
+                TraitMutation::AlignmentBonus(e, d) => {
+                    if &enemy.kind.alignment() == e {
+                        rolls += map_unique(Dice::new(d.clone()), advantage.into());
+                    }
+                }
+
+                _ => {}
+            }
+        }
+        rolls
+    }
+
     fn physical_range(&self) -> u32 {
         if let Some(physical) = &self.physical {
-            let mut rng = thread_rng();
-            let phys = physical.roll();
-            return rng.gen_range(phys..phys * 2);
+            let dmg = self.apply_traits(
+                &self.enemy,
+                &physical,
+                &self.player.mutations().get_physical_attack(),
+            );
+            return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
     }
 
     fn magical_range(&self) -> u32 {
         if let Some(magical) = &self.magic {
-            let mut rng = thread_rng();
-            let magic = magical.roll();
-            return rng.gen_range(magic..magic * 2);
+            let dmg = self.apply_traits(
+                &self.enemy,
+                &magical,
+                &self.player.mutations().get_physical_attack(),
+            );
+            return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
     }
@@ -228,6 +240,8 @@ impl Default for AttackModifiers {
         Self {
             magic: None,
             physical: None,
+            player: Default::default(),
+            enemy: Default::default(),
         }
     }
 }
@@ -249,44 +263,11 @@ impl DefenseModifiers {
         }
     }
 
-    fn multi(mutations: &Vec<TraitMutation>) -> f64 {
-        let mut multi = 0.0;
-        for m in mutations {
-            match m {
-                TraitMutation::MultiplicativeBonus(e) => {
-                    multi += e;
-                }
-                _ => {}
-            }
-        }
-        multi
-    }
-
-    fn advantage(mutations: &Vec<TraitMutation>) -> AdvantageState {
-        let mut advantage: i32 = 0;
-        let map_advantage = |x: AdvantageState| match x {
-            AdvantageState::Advantage => 1,
-            AdvantageState::Disadvantage => -1,
-            _ => 0,
-        };
-        for m in mutations {
-            match m {
-                TraitMutation::Advantage => {
-                    advantage = map_advantage(AdvantageState::Advantage);
-                }
-                TraitMutation::Disadvantage => {
-                    advantage = map_advantage(AdvantageState::Disadvantage);
-                }
-                _ => {}
-            }
-        }
-        advantage.into()
-    }
-
     pub fn dodge(&self) -> bool {
-        let mutations = self.character.mutations().get_dodge();
-        let advantage = Self::advantage(&mutations);
-        let multi = Self::multi(&mutations);
+        let binding = self.character.mutations();
+        let mutations = binding.get_dodge();
+        let advantage = TraitMutations::advantage(&mutations);
+        let multi = TraitMutations::multi(&mutations);
         let map_rolls = |x: bool| if x { 1.0 * multi } else { -1.0 };
 
         let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).success());
@@ -294,14 +275,18 @@ impl DefenseModifiers {
         for m in mutations {
             match m {
                 TraitMutation::FlatIncrease(e) => {
-                    rolls += m(Dice::new(e.clone())
-                        .set_advantage(advantage.into())
-                        .success());
+                    rolls += map_rolls(
+                        Dice::new(e.clone())
+                            .set_advantage(advantage.into())
+                            .success(),
+                    );
                 }
                 TraitMutation::FlatDecrease(e) => {
-                    rolls -= m(Dice::new(e.clone())
-                        .set_advantage((advantage * -1).into())
-                        .success());
+                    rolls -= map_rolls(
+                        Dice::new(e.clone())
+                            .set_advantage((advantage * -1).into())
+                            .success(),
+                    );
                 }
                 _ => {}
             }
@@ -311,9 +296,10 @@ impl DefenseModifiers {
     }
 
     pub fn physical_mitigation(&self) -> f64 {
-        let mutations = self.character.mutations().get_physical_mitigation();
-        let advantage = Self::advantage(&mutations);
-        let multi = Self::multi(&mutations);
+        let binding = self.character.mutations();
+        let mutations = binding.get_armor();
+        let advantage = TraitMutations::advantage(&mutations);
+        let multi = TraitMutations::multi(&mutations);
         let map_rolls = |x: u32| (x as f64 * multi);
 
         let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).roll());
@@ -337,9 +323,10 @@ impl DefenseModifiers {
         rolls.min(90.0).div(100.0)
     }
     pub fn magical_suppress(&self) -> f64 {
-        let mutations = self.character.mutations().get_suppress();
-        let advantage = Self::advantage(&mutations);
-        let multi = Self::multi(&mutations);
+        let binding = self.character.mutations();
+        let mutations = binding.get_suppress();
+        let advantage = TraitMutations::advantage(&mutations);
+        let multi = TraitMutations::multi(&mutations);
         let map_rolls = |x: bool| if x { 1.0 * multi } else { -1.0 };
 
         let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).success());
@@ -347,14 +334,18 @@ impl DefenseModifiers {
         for m in mutations {
             match m {
                 TraitMutation::FlatIncrease(e) => {
-                    rolls += m(Dice::new(e.clone())
-                        .set_advantage(advantage.into())
-                        .success());
+                    rolls += map_rolls(
+                        Dice::new(e.clone())
+                            .set_advantage(advantage.into())
+                            .success(),
+                    );
                 }
                 TraitMutation::FlatDecrease(e) => {
-                    rolls -= m(Dice::new(e.clone())
-                        .set_advantage((advantage * -1).into())
-                        .success());
+                    rolls -= map_rolls(
+                        Dice::new(e.clone())
+                            .set_advantage((advantage * -1).into())
+                            .success(),
+                    );
                 }
                 _ => {}
             }

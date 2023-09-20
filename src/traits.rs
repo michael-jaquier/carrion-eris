@@ -1,5 +1,5 @@
-use crate::dice::{Dice, Die, DieObject};
-use crate::enemies::Alignment;
+use crate::dice::{AdvantageState, Dice, Die, DieObject};
+use crate::units::Alignment;
 use crate::units::Attributes;
 use crate::CarrionError;
 use serde::{Deserialize, Serialize};
@@ -16,10 +16,11 @@ pub enum TraitMutation {
     Disadvantage,
 
     Repeat(usize),
-    AlignmentBonus(Alignment, Box<TraitMutation>),
+    // Alignment bonus is just damage or something related to more dice
+    AlignmentBonus(Alignment, Vec<DieObject>),
 
     CriticalAdvantage,
-    CriticalDamage(f64),
+    CriticalMultiplier(f64),
 }
 
 pub struct TraitMutations {
@@ -42,15 +43,76 @@ impl Display for TraitMutation {
             TraitMutation::Disadvantage => write!(f, "Disadvantage"),
             TraitMutation::Repeat(times) => write!(f, "Repeat({})", times),
             TraitMutation::AlignmentBonus(alignment, mutation) => {
-                write!(f, "AlignmentBonus({:?}, {})", alignment, mutation)
+                write!(f, "AlignmentBonus({:?}, {:?})", alignment, mutation)
             }
             TraitMutation::CriticalAdvantage => write!(f, "CriticalAdvantage"),
-            TraitMutation::CriticalDamage(damage) => write!(f, "CriticalDamage({})", damage),
+            TraitMutation::CriticalMultiplier(damage) => {
+                write!(f, "CriticalMultiplier({})", damage)
+            }
         }
     }
 }
 
 impl TraitMutations {
+    pub(crate) fn multi(mutations: &Vec<TraitMutation>) -> f64 {
+        let mut multi = 1.0;
+        for m in mutations {
+            match m {
+                TraitMutation::MultiplicativeBonus(e) => {
+                    multi += e;
+                }
+                _ => {}
+            }
+        }
+        multi
+    }
+
+    pub(crate) fn critical_advantage(mutations: &Vec<TraitMutation>) -> AdvantageState {
+        let mut critical_advantage = AdvantageState::None;
+        for m in mutations {
+            match m {
+                TraitMutation::CriticalAdvantage => {
+                    critical_advantage = AdvantageState::Advantage;
+                }
+                _ => {}
+            }
+        }
+        critical_advantage
+    }
+
+    pub(crate) fn critical_multiplier(mutations: &Vec<TraitMutation>) -> f64 {
+        let mut critical_multiplier = 1.0;
+        for m in mutations {
+            match m {
+                TraitMutation::CriticalMultiplier(e) => {
+                    critical_multiplier *= e;
+                }
+                _ => {}
+            }
+        }
+        critical_multiplier
+    }
+    pub(crate) fn advantage(mutations: &Vec<TraitMutation>) -> i32 {
+        let mut advantage: i32 = 0;
+        let map_advantage = |x: AdvantageState| match x {
+            AdvantageState::Advantage => 1,
+            AdvantageState::Disadvantage => -1,
+            _ => 0,
+        };
+        for m in mutations {
+            match m {
+                TraitMutation::Advantage => {
+                    advantage = map_advantage(AdvantageState::Advantage);
+                }
+                TraitMutation::Disadvantage => {
+                    advantage = map_advantage(AdvantageState::Disadvantage);
+                }
+                _ => {}
+            }
+        }
+
+        advantage
+    }
     pub fn set_magic_attack(&mut self, tr: TraitMutation) {
         self.magic_attack.push(tr)
     }
@@ -76,7 +138,7 @@ impl TraitMutations {
                 return false;
             }
 
-            TraitMutation::CriticalDamage(_) => {
+            TraitMutation::CriticalMultiplier(_) => {
                 warn!("Invalid Mutation for dodge {}. Skipping", tr);
                 return false;
             }
@@ -247,15 +309,15 @@ impl CharacterTraits {
                 CharacterTraits::FolkHero => {
                     trait_mutations.set_magic_attack(TraitMutation::AlignmentBonus(
                         Alignment::ChaoticEvil,
-                        Box::from(TraitMutation::FlatIncrease(vec![Die::D6.into(); 2])),
+                        vec![Die::D6.into(); 2],
                     ));
                     trait_mutations.set_magic_attack(TraitMutation::AlignmentBonus(
                         Alignment::NeutralEvil,
-                        Box::from(TraitMutation::FlatIncrease(vec![Die::D6.into(); 2])),
+                        vec![Die::D6.into(); 2],
                     ));
                     trait_mutations.set_magic_attack(TraitMutation::AlignmentBonus(
                         Alignment::LawfulEvil,
-                        Box::from(TraitMutation::FlatIncrease(vec![Die::D6.into(); 2])),
+                        vec![Die::D6.into(); 2],
                     ));
                 }
 
@@ -283,7 +345,7 @@ impl CharacterTraits {
                 CharacterTraits::Cursed => {
                     trait_mutations
                         .set_suppress(TraitMutation::FlatDecrease(vec![Die::D6.into(); 2]));
-                    trait_mutations.set_magic_attack(TraitMutation::CriticalDamage(0.85));
+                    trait_mutations.set_magic_attack(TraitMutation::CriticalMultiplier(0.85));
                     trait_mutations.set_magic_attack(TraitMutation::MultiplicativeBonus(0.9))
                 }
                 CharacterTraits::Unlucky => {
@@ -293,21 +355,21 @@ impl CharacterTraits {
                 CharacterTraits::Righteous => {
                     trait_mutations.set_magic_attack(TraitMutation::AlignmentBonus(
                         Alignment::ChaoticEvil,
-                        Box::from(TraitMutation::FlatIncrease(vec![Die::D6.into(); 2])),
+                        vec![Die::D6.into(); 2],
                     ));
                     trait_mutations.set_magic_attack(TraitMutation::AlignmentBonus(
                         Alignment::ChaoticNeutral,
-                        Box::from(TraitMutation::FlatIncrease(vec![Die::D6.into(); 2])),
+                        vec![Die::D6.into(); 2],
                     ));
                     trait_mutations.set_magic_attack(TraitMutation::AlignmentBonus(
                         Alignment::ChaoticGood,
-                        Box::from(TraitMutation::FlatIncrease(vec![Die::D6.into(); 2])),
+                        vec![Die::D6.into(); 2],
                     ));
                 }
                 CharacterTraits::Greedy => {}
                 CharacterTraits::Keen => {
-                    trait_mutations.set_magic_attack(TraitMutation::CriticalDamage(1.35));
-                    trait_mutations.set_physical_attack(TraitMutation::CriticalDamage(1.35));
+                    trait_mutations.set_magic_attack(TraitMutation::CriticalMultiplier(1.35));
+                    trait_mutations.set_physical_attack(TraitMutation::CriticalMultiplier(1.35));
                     trait_mutations.set_magic_attack(TraitMutation::CriticalAdvantage);
                     trait_mutations.set_physical_attack(TraitMutation::CriticalAdvantage);
                 }

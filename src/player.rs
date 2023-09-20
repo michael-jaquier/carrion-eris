@@ -1,4 +1,4 @@
-use crate::enemies::{AttackType, DamageType, Enemy, EnemyState};
+use crate::enemies::{Enemy, EnemyState};
 use crate::BattleInfo;
 
 use serde::{Deserialize, Serialize};
@@ -6,19 +6,22 @@ use serde::{Deserialize, Serialize};
 use crate::classes::Classes;
 use crate::mutators::{AttackModifiers, DefenseModifiers};
 use crate::traits::{CharacterTraits, TraitMutations};
-use crate::units::Attributes;
+use crate::units::{AttackType, Attributes};
 use std::collections::HashSet;
 
-use std::fmt::{write, Display, Formatter};
+use std::fmt::{Display, Formatter};
 
 use crate::dice::{Dice, Die};
+use crate::units::DamageType;
 use tracing::log::debug;
-use tracing::{info, warn};
+use tracing::warn;
 
 pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
 pub type PhysicalDice = Option<Dice>;
 pub type ActionDice = (PhysicalDice, MagicalDice);
+
+
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum PlayerAction {
@@ -63,9 +66,9 @@ impl PlayerAction {
     pub fn action_base_damage(&self) -> ActionDice {
         let attack_dice = |d, n| Dice::new(vec![d; n]);
         match self {
-            PlayerAction::Slash => (Some(attack_dice(Die::D20.into(), 2)), None),
+            PlayerAction::Slash => (Some(attack_dice(Die::D20.into(), 1)), None),
             PlayerAction::MagicMissile => {
-                let mut magical_die = attack_dice(Die::D4.into(), 7);
+                let mut magical_die = attack_dice(Die::D4.into(), 4);
                 magical_die.dice().iter_mut().for_each(|d| {
                     d.set_critical_die(Die::D4);
                     d.increase_critical_multiplier(0.75);
@@ -73,14 +76,14 @@ impl PlayerAction {
                 (None, Some(magical_die))
             }
             PlayerAction::FireBall => (
-                Some(attack_dice(Die::D4.into(), 3)),
-                Some(attack_dice(Die::D12.into(), 3)),
+                Some(attack_dice(Die::D4.into(), 1)),
+                Some(attack_dice(Die::D12.into(), 2)),
             ),
         }
     }
 
     pub fn action_attribute_modifiers(&self, player: &Character) -> u32 {
-        let default_scale = |n: u32| ((n as f64).ln().powf(2.0)).floor() as u32;
+        let default_scale = |n: u32| ((n as f64).ln().powf(1.1)).floor() as u32;
         match self {
             PlayerAction::Slash => default_scale(player.attributes.strength.inner()),
             PlayerAction::MagicMissile => default_scale(player.attributes.charisma.inner()),
@@ -89,7 +92,7 @@ impl PlayerAction {
     }
 
     pub fn action_level_scaling(&self, n: u32) -> u32 {
-        let default_scale = ((n as f64).ln().powf(2.0)).floor() as u32;
+        let default_scale = ((n as f64).ln().powf(1.1)).floor() as u32;
         match self {
             PlayerAction::Slash => default_scale,
             PlayerAction::MagicMissile => default_scale,

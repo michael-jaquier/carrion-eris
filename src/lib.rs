@@ -4,6 +4,7 @@ pub mod commands;
 pub mod database;
 pub mod dice;
 pub mod enemies;
+pub mod items;
 pub mod mutators;
 pub mod player;
 pub mod traits;

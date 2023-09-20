@@ -82,6 +82,12 @@ pub async fn character_trait(
                 .await?;
             }
         }
+    } else {
+        ctx.reply(format!(
+            "No trait provided\n Valid Traits:\n {}",
+            CharacterTraits::valid_traits()
+        ))
+        .await?;
     }
     Ok(())
 }

@@ -1,60 +1,22 @@
 use crate::dice::{Dice, Die};
+use crate::items::Item;
 use crate::player::Character;
-use crate::units::Attribute;
 use crate::units::Attributes;
+use crate::units::{AttackType, Attribute, DamageType};
 use rand::distributions::Standard;
 use rand::prelude::{Distribution, SliceRandom};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-use tracing::log::info;
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum AttackType {
-    Physical(u32),
-    Magical(u32),
-}
-
-impl AttackType {
-    pub fn inner(&self) -> u32 {
-        match self {
-            AttackType::Physical(d) => *d,
-            AttackType::Magical(d) => *d,
-        }
-    }
-}
+use crate::units::Alignment;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EnemyState {
     Dead,
     Alive,
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum EquipmentSlot {
-    Head,
-    Chest,
-    Legs,
-    Feet,
-    Hands,
-    Weapon,
-    Shield,
-    Ring,
-    Amulet,
-    Consumable,
-    Misc,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub struct Item {
-    name: String,
-    description: String,
-    value: u32,
-    rarity: u32,
-    damage: u32,
-    defense: u32,
-    resistance: u32,
-    slot: EquipmentSlot,
-}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Enemy {
     pub(crate) kind: Mob,
@@ -70,18 +32,6 @@ pub struct Enemy {
     actions: Vec<MobAction>,
 }
 impl Enemy {
-    pub fn attribute_difference(&self, attribute: Attribute) -> i32 {
-        match attribute {
-            Attribute::Strength(_) => self.attributes.strength.absolute_difference(&attribute),
-            Attribute::Intelligence(_) => self.attributes.strength.absolute_difference(&attribute),
-            Attribute::Dexterity(_) => self.attributes.dexterity.absolute_difference(&attribute),
-            Attribute::Constitution(_) => {
-                self.attributes.constitution.absolute_difference(&attribute)
-            }
-            Attribute::Wisdom(_) => self.attributes.wisdom.absolute_difference(&attribute),
-            Attribute::Charisma(_) => self.attributes.charisma.absolute_difference(&attribute),
-        }
-    }
     fn ranges(level: u32) -> u32 {
         let mut rng = rand::thread_rng();
         let ranges = 1..(level.pow(3)) + 1;
@@ -102,7 +52,18 @@ impl Enemy {
 
     fn super_logarithm_scaling(level: u32) -> u32 {
         let default_scale = |n: u32| ((n as f64).ln().powf(2.0)).floor() as u32 + level * 10;
+
         default_scale(level)
+    }
+
+    fn hp_gain(&self, level: u32) -> u32 {
+        let constitution = self.attributes.constitution.inner();
+        let hp_gain = match self.kind {
+            Mob::Orc => (constitution * 20) + (level * 10),
+            Mob::Elf => (constitution * 10) + (level * 10),
+            Mob::KingSlime => (constitution * 200) + (level * 50),
+        };
+        hp_gain
     }
 
     fn dice_scaling_log(level: u32) -> Dice {
@@ -124,6 +85,24 @@ impl Enemy {
             items: vec![],
             state: EnemyState::Alive,
             actions: vec![MobAction::Bite, MobAction::Claw, MobAction::Stab],
+        }
+    }
+
+    pub fn boss(mob: Mob, level: u32) -> Enemy {
+        Enemy {
+            kind: mob.clone(),
+            level,
+            experience: Enemy::linear_scaling(level * 10),
+            health: Enemy::super_logarithm_scaling(level * 50) as i32,
+            defense: Dice::new(vec![Die::D20.into(); 20].into()),
+            resistance: Dice::new(vec![Die::D20.into(); 15].into()),
+            gold: Enemy::super_logarithm_scaling(level * 100),
+            attributes: <&Mob as Into<Attributes>>::into((&mob))
+                .log_scaling(level)
+                .clone(),
+            items: vec![],
+            state: EnemyState::Alive,
+            actions: vec![],
         }
     }
 
@@ -167,36 +146,13 @@ impl Default for Enemy {
         }
     }
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash)]
-pub enum Alignment {
-    LawfulGood,
-    LawfulNeutral,
-    LawfulEvil,
-    NeutralGood,
-    TrueNeutral,
-    NeutralEvil,
-    ChaoticGood,
-    ChaoticNeutral,
-    ChaoticEvil,
-}
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash)]
-pub enum DamageType {
-    Fire,
-    Water,
-    Earth,
-    Air,
-    Light,
-    Dark,
-    Iron,
-    Arcane,
-    Holy,
-    NonElemental,
-    Physical,
-}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
 pub enum Mob {
     Orc,
     Elf,
+    // Bosses
+    KingSlime,
 }
 
 impl Mob {
@@ -207,6 +163,7 @@ impl Mob {
             Mob::Elf => Enemy::weak(Mob::Elf, level_range)
                 .set_actions(self.actions())
                 .set_experience_multiple(4),
+            Mob::KingSlime => Enemy::boss(Mob::KingSlime, level_range).set_actions(self.actions()),
         }
     }
 
@@ -214,6 +171,11 @@ impl Mob {
         match self {
             Mob::Orc => vec![MobAction::Bite, MobAction::Claw, MobAction::Stab],
             Mob::Elf => vec![MobAction::Stab, MobAction::FireBall],
+            Mob::KingSlime => vec![
+                MobAction::SlimeAbsorb,
+                MobAction::SlimeBall,
+                MobAction::SlimePunch,
+            ],
         }
     }
 
@@ -221,13 +183,15 @@ impl Mob {
         match self {
             Mob::Orc => Alignment::ChaoticEvil,
             Mob::Elf => Alignment::LawfulGood,
+            Mob::KingSlime => Alignment::NeutralEvil,
         }
     }
 
-    pub fn vulnerability(&self) -> DamageType {
+    pub fn vulnerability(&self) -> Option<DamageType> {
         match self {
-            Mob::Orc => DamageType::Fire,
-            Mob::Elf => DamageType::Iron,
+            Mob::Orc => Some(DamageType::Fire),
+            Mob::Elf => Some(DamageType::Iron),
+            _ => None,
         }
     }
 }
@@ -237,15 +201,17 @@ impl Display for Mob {
         match self {
             Mob::Orc => write!(f, "Orc 🧌"),
             Mob::Elf => write!(f, "Elf 🧝"),
+            Mob::KingSlime => write!(f, "King Slime 👑"),
         }
     }
 }
 
 impl Distribution<Mob> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Mob {
-        match rng.gen_range(0..=20) {
+        match rng.gen_range(0..=1000) {
             // rand 0.8
-            0 => Mob::Elf,
+            0..=100 => Mob::Elf,
+            101..=102 => Mob::KingSlime,
             _ => Mob::Orc,
         }
     }
@@ -257,6 +223,9 @@ pub enum MobAction {
     Claw,
     Stab,
     FireBall,
+    SlimePunch,
+    SlimeBall,
+    SlimeAbsorb,
 }
 
 impl MobAction {
@@ -285,20 +254,33 @@ impl MobAction {
                 .roll(),
             ),
             MobAction::FireBall => AttackType::Magical(
-                attack_dice(Die::D20.into(), die(enemy.attributes.strength, enemy.level)).roll(),
+                attack_dice(
+                    Die::D20.into(),
+                    die(enemy.attributes.intelligence, enemy.level),
+                )
+                .roll(),
             ),
-        }
-    }
-}
-
-impl Distribution<MobAction> for MobAction {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MobAction {
-        match rng.gen_range(0..=3) {
-            0 => MobAction::Bite,
-            1 => MobAction::Claw,
-            2 => MobAction::Stab,
-            3 => MobAction::FireBall,
-            _ => MobAction::Bite,
+            MobAction::SlimePunch => AttackType::Physical(
+                attack_dice(
+                    Die::D20.into(),
+                    die(enemy.attributes.dexterity, enemy.level * 10),
+                )
+                .roll(),
+            ),
+            MobAction::SlimeBall => AttackType::Magical(
+                attack_dice(
+                    Die::D20.into(),
+                    die(enemy.attributes.intelligence, enemy.level * 10),
+                )
+                .roll(),
+            ),
+            MobAction::SlimeAbsorb => AttackType::Magical(
+                attack_dice(
+                    Die::D100.into(),
+                    die(enemy.attributes.wisdom, enemy.level * 10),
+                )
+                .roll(),
+            ),
         }
     }
 }

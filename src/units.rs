@@ -29,6 +29,19 @@ impl Display for Attributes {
     }
 }
 
+impl Attributes {
+    pub fn log_scaling(&mut self, level: u32) -> &mut Attributes {
+        let default_scale = |n: u32| ((n as f64).ln().powf(1.1)).floor() as u32;
+        self.constitution.plus(default_scale(level));
+        self.strength.plus(default_scale(level));
+        self.intelligence.plus(default_scale(level));
+        self.dexterity.plus(default_scale(level));
+        self.wisdom.plus(default_scale(level));
+        self.charisma.plus(default_scale(level));
+        self
+    }
+}
+
 impl From<&Classes> for Attributes {
     fn from(class: &Classes) -> Self {
         let mut ca = Self::default();
@@ -63,6 +76,14 @@ impl From<&Mob> for Attributes {
                 ca.intelligence = Attribute::Intelligence(22);
                 ca.dexterity = Attribute::Dexterity(19);
                 ca.constitution = Attribute::Constitution(3);
+            }
+            Mob::KingSlime => {
+                ca.intelligence = Attribute::Intelligence(22);
+                ca.dexterity = Attribute::Dexterity(22);
+                ca.constitution = Attribute::Constitution(22);
+                ca.wisdom = Attribute::Wisdom(22);
+                ca.strength = Attribute::Strength(22);
+                ca.constitution = Attribute::Constitution(22);
             }
         }
         ca
@@ -201,6 +222,49 @@ impl Sub for Attribute {
             Attribute::Constitution(_) => Attribute::Constitution(v),
             Attribute::Wisdom(_) => Attribute::Wisdom(v),
             Attribute::Charisma(_) => Attribute::Charisma(v),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash)]
+pub enum DamageType {
+    Fire,
+    Water,
+    Earth,
+    Air,
+    Light,
+    Dark,
+    Iron,
+    Arcane,
+    Holy,
+    NonElemental,
+    Physical,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash)]
+pub enum Alignment {
+    LawfulGood,
+    LawfulNeutral,
+    LawfulEvil,
+    NeutralGood,
+    TrueNeutral,
+    NeutralEvil,
+    ChaoticGood,
+    ChaoticNeutral,
+    ChaoticEvil,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum AttackType {
+    Physical(u32),
+    Magical(u32),
+}
+
+impl AttackType {
+    pub fn inner(&self) -> u32 {
+        match self {
+            AttackType::Physical(d) => *d,
+            AttackType::Magical(d) => *d,
         }
     }
 }

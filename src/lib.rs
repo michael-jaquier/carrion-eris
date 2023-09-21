@@ -24,8 +24,8 @@ use thiserror::Error;
 
 use crate::player::PlayerAction;
 
-use std::fmt::{Display, Formatter};
 use crate::units::DamageType;
+use std::fmt::{Display, Formatter};
 
 #[derive(Error, Debug)]
 pub enum CarrionError {
@@ -134,4 +134,9 @@ trait AttributeScaling {
 
 trait ElementalScaling {
     fn scaling(&self) -> Option<crate::units::DamageType>;
+}
+
+pub fn log_power_scale(n: u32, power: Option<f64>) -> u32 {
+    let default_scale = |n: u32| ((n as f64).ln().powf(power.unwrap_or(1.1))).floor() as u32;
+    default_scale(n)
 }

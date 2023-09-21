@@ -1,5 +1,5 @@
 use crate::enemies::Enemy;
-use crate::player::{Character, PlayerAction};
+use crate::player::{ActionDice, Character, PlayerAction};
 use crate::traits::{TraitMutation, TraitMutations};
 use std::ops::Div;
 
@@ -9,50 +9,61 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttackModifiers {
-    magic: Option<Dice>,
-    physical: Option<Dice>,
+    DiceSet: ActionDice,
     player: Character,
     enemy: Enemy,
 }
 
 impl AttackModifiers {
     pub fn new(
-        magic: Option<Dice>,
-        physical: Option<Dice>,
+       dice_set: ActionDice,
         player: &Character,
         enemy: &Enemy,
     ) -> Self {
         Self {
-            magic,
-            physical,
+            DiceSet: dice_set,
             player: player.clone(),
             enemy: enemy.clone(),
         }
     }
     pub fn builder(player: &Character, enemy: &Enemy) -> AttackModifiers {
-        AttackModifiers::new(None, None, player, enemy)
-            .apply_skill_base(&player.class.action())
-            .apply_level_scaling(player, &player.class.action())
-            .apply_attributes(enemy, player, &player.class.action())
+        AttackModifiers::new(Default::default(), player, enemy)
+            .apply_skill_base(&player)
             .apply_vulnerability(enemy, &player.class.action())
             .clone()
+    }
+
+    fn physical_mut(&mut self) -> Option<&mut Dice> {
+        self.DiceSet.physical_mut()
+    }
+
+    fn magical_mut(&mut self) -> Option<&mut Dice> {
+        self.DiceSet.magical_mut()
+    }
+
+    fn physical(&self) -> Option<&Dice> {
+        self.DiceSet.physical()
+    }
+
+    fn magical(&self) -> Option<&Dice> {
+        self.DiceSet.magical()
     }
 
     fn set_advantage_state(&mut self, advantage: AdvantageState) {
         match advantage {
             AdvantageState::Advantage => {
-                if let Some(d) = self.physical.as_mut() {
+                if let Some(d) = &mut self.physical_mut() {
                     d.advantage();
                 }
-                if let Some(d) = self.magic.as_mut() {
+                if let Some( d) = self.magical_mut().as_mut() {
                     d.advantage();
                 }
             }
             AdvantageState::Disadvantage => {
-                if let Some(d) = self.physical.as_mut() {
+                if let Some( d) = self.physical_mut().as_mut() {
                     d.disadvantage();
                 }
-                if let Some(d) = self.magic.as_mut() {
+                if let Some( d) = self.magical_mut().as_mut() {
                     d.disadvantage();
                 }
             }
@@ -61,55 +72,55 @@ impl AttackModifiers {
     }
 
     fn add_physical_die(&mut self, die: Vec<DieObject>) {
-        if let Some(d) = self.physical.as_mut() {
+        if let Some(d) = self.physical_mut().as_mut() {
             d.add_die(die.clone());
         }
     }
 
     fn add_magical_die(&mut self, die: Vec<DieObject>) {
-        if let Some(d) = self.magic.as_mut() {
+        if let Some(d) = self.magical_mut().as_mut() {
             d.add_die(die.clone());
         }
     }
 
     fn add_existing_die(&mut self, die: Vec<DieObject>) {
-        if self.physical.is_some() && self.magic.is_some() {
+        if self.physical_mut().is_some() && self.magical_mut().is_some() {
             for d in die {
                 let choice = thread_rng().gen_bool(0.5);
                 if choice {
-                    self.physical.as_mut().unwrap().add_die(vec![d]);
+                    self.physical_mut().as_mut().unwrap().add_die(vec![d]);
                 } else {
-                    self.magic.as_mut().unwrap().add_die(vec![d]);
+                    self.magical_mut().as_mut().unwrap().add_die(vec![d]);
                 }
             }
         } else {
-            if let Some(d) = self.physical.as_mut() {
+            if let Some(d) = self.physical_mut().as_mut() {
                 d.add_die(die.clone());
             }
-            if let Some(d) = self.magic.as_mut() {
+            if let Some(d) = self.magical_mut().as_mut() {
                 d.add_die(die.clone());
             }
         }
     }
 
     fn set_negative_die(&mut self, die: Vec<DieObject>) {
-        if self.physical.is_some() && self.magic.is_some() {
+        if self.physical_mut().is_some() && self.magical_mut().is_some() {
             for _d in die {
                 let _choice = thread_rng().gen_bool(0.5);
             }
         }
 
-        if let Some(_d) = self.physical.as_mut() {}
-        if let Some(_d) = self.magic.as_mut() {}
+        if let Some(_d) = self.physical_mut().as_mut() {}
+        if let Some(_d) = self.magical_mut().as_mut() {}
     }
 
     fn lower_critical_targets(&mut self) {
-        if let Some(d) = self.physical.as_mut() {
+        if let Some(d) = self.physical_mut().as_mut() {
             d.dice().iter_mut().for_each(|d| {
                 d.set_critical(-1);
             });
         }
-        if let Some(d) = self.magic.as_mut() {
+        if let Some(d) = self.magical_mut().as_mut() {
             d.dice().iter_mut().for_each(|d| {
                 d.set_critical(-1);
             });
@@ -117,43 +128,21 @@ impl AttackModifiers {
     }
 
     fn set_critical_die(&mut self, die: Die) {
-        if let Some(d) = self.physical.as_mut() {
+        if let Some(d) = self.physical_mut().as_mut() {
             d.dice().iter_mut().for_each(|d| {
                 d.set_critical_die(die.clone());
             });
         }
-        if let Some(d) = self.magic.as_mut() {
+        if let Some(d) = self.magical_mut().as_mut() {
             d.dice().iter_mut().for_each(|d| {
                 d.set_critical_die(die.clone());
             });
         }
     }
 
-    fn apply_skill_base(&mut self, action: &PlayerAction) -> &mut AttackModifiers {
-        let action_die = action.action_base_damage();
-        self.physical = action_die.physical.clone();
-        self.magic = action_die.magical.clone();
-        self
-    }
-
-    fn apply_level_scaling(
-        &mut self,
-        player: &Character,
-        action: &PlayerAction,
-    ) -> &mut AttackModifiers {
-        let n = action.action_level_scaling(player.level);
-        self.add_existing_die(vec![Die::D4.into(); n as usize]);
-        self
-    }
-
-    fn apply_attributes(
-        &mut self,
-        _enemy: &Enemy,
-        player: &Character,
-        action: &PlayerAction,
-    ) -> &mut AttackModifiers {
-        let n = action.action_attribute_modifiers(player);
-        self.add_existing_die(vec![Die::D6.into(); n as usize]);
+    fn apply_skill_base(&mut self, player: &Character) -> &mut AttackModifiers {
+        let skill = player.class.action();
+        self.DiceSet = skill.action_base_damage(player);
         self
     }
 
@@ -163,7 +152,7 @@ impl AttackModifiers {
         action: &PlayerAction,
     ) -> &mut AttackModifiers {
         if let Some(vulnerability) = enemy.kind.vulnerability() {
-            if let Some(action_element) =  crate::ElementalScaling::scaling(action) {
+            if let Some(action_element) = crate::ElementalScaling::scaling(action) {
                 if action_element == vulnerability {
                     self.add_existing_die(vec![Die::D4.into(); 2])
                 }
@@ -208,7 +197,7 @@ impl AttackModifiers {
     }
 
     fn physical_range(&self) -> u32 {
-        if let Some(physical) = &self.physical {
+        if let Some(physical) = &self.physical() {
             let dmg = self.apply_traits(
                 &self.enemy,
                 &physical,
@@ -220,7 +209,7 @@ impl AttackModifiers {
     }
 
     fn magical_range(&self) -> u32 {
-        if let Some(magical) = &self.magic {
+        if let Some(magical) = &self.magical() {
             let dmg = self.apply_traits(
                 &self.enemy,
                 &magical,
@@ -239,8 +228,7 @@ impl AttackModifiers {
 impl Default for AttackModifiers {
     fn default() -> Self {
         Self {
-            magic: None,
-            physical: None,
+            DiceSet: Default::default(),
             player: Default::default(),
             enemy: Default::default(),
         }

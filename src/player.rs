@@ -1,5 +1,5 @@
 use crate::enemies::{Enemy, EnemyState};
-use crate::{AttributeScaling, BattleInfo, ElementalScaling};
+use crate::{log_power_scale, AttributeScaling, BattleInfo, ElementalScaling};
 
 use serde::{Deserialize, Serialize};
 
@@ -9,29 +9,71 @@ use crate::traits::{CharacterTraits, TraitMutations};
 use crate::units::{AttackType, Attribute, Attributes};
 use std::collections::HashSet;
 
-use eris_macro::{ErisTitleCase, AttributeScaling, ElementalScaling};
-use std::fmt::Display;
+use eris_macro::{AttributeScaling, ElementalScaling, ErisTitleCase};
 use heck::ToTitleCase;
+use rand::{thread_rng, Rng};
 use serenity::model::guild::automod::ActionType;
+use std::fmt::Display;
 
-use crate::dice::{AdvantageState, Dice, Die};
+use crate::dice::{AdvantageState, Dice, Die, DieObject};
 use crate::units::DamageType;
 use tracing::log::debug;
-use tracing::{Instrument, warn};
+use tracing::{warn, Instrument};
 
 pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
 pub type PhysicalDice = Option<Dice>;
 
 
-
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionDice {
     pub physical: Option<Dice>,
     pub magical: Option<Dice>,
 }
 
+impl Default for ActionDice {
+    fn default() -> Self {
+        Self {
+            physical: None,
+            magical: None,
+        }
+    }
+}
 
 impl ActionDice {
+
+    pub fn physical_mut(&mut self) -> Option<&mut Dice> {
+        self.physical.as_mut()
+    }
+    pub fn magical_mut(&mut self) -> Option<&mut Dice> {
+        self.magical.as_mut()
+    }
+
+    pub fn physical(&self) -> Option<&Dice> {
+        self.physical.as_ref()
+    }
+    pub fn magical(&self) -> Option<&Dice> {
+        self.magical.as_ref()
+    }
+    fn add_existing_die(&mut self, die: Vec<DieObject>) {
+        if self.physical.is_some() && self.magical.is_some() {
+            for d in die {
+                let choice = thread_rng().gen_bool(0.5);
+                if choice {
+                    self.physical.as_mut().unwrap().add_die(vec![d]);
+                } else {
+                    self.magical.as_mut().unwrap().add_die(vec![d]);
+                }
+            }
+        } else {
+            if let Some(d) = self.physical.as_mut() {
+                d.add_die(die.clone());
+            }
+            if let Some(d) = self.magical.as_mut() {
+                d.add_die(die.clone());
+            }
+        }
+    }
     pub fn set_critical_state(&mut self, state: AdvantageState) {
         if let Some(dice) = &mut self.physical {
             dice.set_critical_advantage(state)
@@ -47,13 +89,6 @@ impl ActionDice {
         }
         if let Some(dice) = &mut self.magical {
             dice.set_critical_target(target)
-        }
-    }}
-impl Default for ActionDice {
-    fn default() -> Self {
-        Self {
-            physical: None,
-            magical: None,
         }
     }
 }
@@ -73,6 +108,9 @@ pub enum PlayerAction {
     #[element("water")]
     #[stat("intelligence")]
     WaterBall,
+    #[element("earth")]
+    #[stat("constitution")]
+    EarthShatter,
 }
 
 impl Display for PlayerAction {
@@ -81,8 +119,6 @@ impl Display for PlayerAction {
         write!(f, "{}", string.to_title_case())
     }
 }
-
-
 
 impl PlayerAction {
     pub fn damage(&self, modifiers: AttackModifiers) -> u32 {
@@ -93,42 +129,46 @@ impl PlayerAction {
         self.damage(AttackModifiers::builder(player, enemy))
     }
 
-    pub fn action_base_damage(&self) -> ActionDice {
-        let mut base_die = ActionDice::default();
+    fn attribute(&self, base_die: &mut ActionDice, attributes: &Attributes) {
+        let n = if let Some(attribute) = AttributeScaling::scaling(self) {
+            let attribute_value = attributes.get(&attribute);
+            log_power_scale(attribute_value, None)
+        } else {
+            0
+        } as usize;
+
         if let Some(attribute) = AttributeScaling::scaling(self) {
-             match attribute {
+            match attribute {
                 Attribute::Strength(_) => {
-                    base_die.physical = Some(Dice::new(vec![Die::D20.into(); 1]));
+                    base_die.physical = Some(Dice::new(vec![Die::D20.into(); 1 + n]));
                 }
                 Attribute::Intelligence(_) => {
-                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 4]));
-
+                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 4 + n]));
                 }
                 Attribute::Dexterity(_) => {
-                    base_die.physical = Some(Dice::new(vec![Die::D12.into(); 2]));
-
+                    base_die.physical = Some(Dice::new(vec![Die::D12.into(); 2 + 2 * n]));
                 }
                 Attribute::Constitution(_) => {
-                    base_die.physical = Some(Dice::new(vec![Die::D4.into(); 2]));
-                    base_die.magical = Some(Dice::new(vec![Die::D4.into(); 4]));
-
+                    base_die.physical = Some(Dice::new(vec![Die::D4.into(); 4 + 3 * n]));
+                    base_die.magical = Some(Dice::new(vec![Die::D4.into(); 2 + 3 * n]));
                 }
                 Attribute::Wisdom(_) => {
-                    base_die.magical = Some(Dice::new(vec![Die::D6.into(); 4]));
+                    base_die.magical = Some(Dice::new(vec![Die::D6.into(); 4 + 2 * n]));
                 }
                 Attribute::Charisma(_) => {
-                    base_die.magical = Some(Dice::new(vec![Die::D8.into(); 3]));
+                    base_die.magical = Some(Dice::new(vec![Die::D8.into(); 3 + 2 * n]));
                 }
             };
         };
+    }
+
+    fn elemental(&self, base_die: &mut ActionDice) {
         if let Some(elemental) = ElementalScaling::scaling(self) {
             match elemental {
                 DamageType::Fire => {
                     base_die.set_critical_state(AdvantageState::Advantage);
-
                 }
-                DamageType::Water => {
-                }
+                DamageType::Water => {}
                 DamageType::Earth => {}
                 DamageType::Air => {}
                 DamageType::Light => {}
@@ -143,26 +183,20 @@ impl PlayerAction {
                 DamageType::Physical => {}
             }
         }
-
-      base_die
     }
 
-    pub fn action_attribute_modifiers(&self, player: &Character) -> u32 {
-        let default_scale = |n: u32| ((n as f64).ln().powf(1.1)).floor() as u32;
-        let attribute =  AttributeScaling::scaling(self);
-        if let Some(attribute) = attribute {
-            let attribute_value = player.attributes.get(&attribute);
-            default_scale(attribute_value)
-        } else {
-            1
-        }
+    pub fn action_base_damage(&self, player: &Character) -> ActionDice {
+        let mut base_die = ActionDice::default();
+        self.attribute(&mut base_die, &player.attributes);
+        self.elemental(&mut base_die);
+        self.action_level_scaling(&mut base_die, player);
+        base_die
     }
 
-    pub fn action_level_scaling(&self, n: u32) -> u32 {
-        let default_scale = ((n as f64).ln().powf(1.1)).floor() as u32;
-        match self {
-            _ => default_scale,
-        }
+    pub fn action_level_scaling(&self, base_die: &mut ActionDice, player: &Character) {
+        let scaling = log_power_scale(player.level, Some(1.1)) as usize;
+        let additional_die = vec![Die::D4.into(); scaling];
+        base_die.add_existing_die(additional_die);
     }
 }
 
@@ -179,7 +213,6 @@ pub struct Character {
     pub(crate) traits: HashSet<CharacterTraits>,
     pub(crate) available_traits: u32,
 }
-
 
 impl Default for Character {
     fn default() -> Self {
@@ -352,12 +385,11 @@ impl Display for Character {
 
 #[cfg(test)]
 mod test {
-    use crate::AttributeScaling;
-    use crate::ElementalScaling;
     use crate::mutators::AttackModifiers;
     use crate::units::Attribute::Intelligence;
     use crate::units::DamageType::Arcane;
-
+    use crate::AttributeScaling;
+    use crate::ElementalScaling;
 
     #[test]
     fn attack_modifiers() {
@@ -375,13 +407,12 @@ mod test {
 
     #[test]
     fn player_action_attributes() {
-        use crate::player::PlayerAction;
         use crate::classes::Classes;
+        use crate::player::PlayerAction;
         let action = PlayerAction::MagicMissile;
         let element = ElementalScaling::scaling(&action);
-        let attribute =  AttributeScaling::scaling(&action);
-       assert_eq!(element, Some(Arcane));
+        let attribute = AttributeScaling::scaling(&action);
+        assert_eq!(element, Some(Arcane));
         assert_eq!(attribute, Some(Intelligence(0)));
     }
-
 }

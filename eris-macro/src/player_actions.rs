@@ -33,7 +33,6 @@ pub fn eris_title_case(ast: &DeriveInput) -> TokenStream2 {
     q.into()
 }
 
-
 pub fn eris_from_dmg(ast: &DeriveInput) -> TokenStream2 {
     let name = &ast.ident;
     let variants = match &ast.data {
@@ -48,7 +47,7 @@ pub fn eris_from_dmg(ast: &DeriveInput) -> TokenStream2 {
         for attr in variant.attrs.iter() {
             if attr.path().is_ident("stat") {
                 let stat_value: Expr = attr.parse_args().unwrap();
-                hit_enum.push(variant.ident.clone());;
+                hit_enum.push(variant.ident.clone());
                 qq.push(stat_value);
             }
         }
@@ -82,7 +81,7 @@ pub fn eris_elemental_scaling(ast: &DeriveInput) -> TokenStream2 {
         for attr in variant.attrs.iter() {
             if attr.path().is_ident("element") {
                 let stat_value: Expr = attr.parse_args().unwrap();
-                hit_enum.push(variant.ident.clone());;
+                hit_enum.push(variant.ident.clone());
                 qq.push(stat_value);
             }
         }

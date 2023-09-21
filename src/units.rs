@@ -1,9 +1,9 @@
 use crate::classes::Classes;
 use crate::enemies::Mob;
+use crate::AttributeScaling;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::{Add, Deref, Sub};
-use crate::AttributeScaling;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Attributes {
@@ -14,7 +14,6 @@ pub struct Attributes {
     pub(crate) wisdom: Attribute,
     pub(crate) charisma: Attribute,
 }
-
 
 impl Display for Attributes {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -147,8 +146,6 @@ impl From<&str> for Attribute {
     }
 }
 
-
-
 impl Display for Attribute {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -163,7 +160,6 @@ impl Display for Attribute {
 }
 
 impl Attribute {
-
     fn from_text(s: &str) -> Result<Attribute, ()> {
         match s.to_lowercase().as_str() {
             "strength" => Ok(Attribute::Strength(0)),

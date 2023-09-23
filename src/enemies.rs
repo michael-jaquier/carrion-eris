@@ -1,8 +1,10 @@
 use crate::dice::{Dice, Die};
 use crate::items::Item;
-use crate::player::Character;
+use crate::player::{ActionDice, Character};
+use crate::skills::MobAction;
 use crate::units::Attributes;
-use crate::units::{AttackType, Attribute, DamageType};
+use crate::units::{AttackType, DamageType};
+use eris_macro::{ErisDisplayEmoji, ErisMob};
 use rand::distributions::Standard;
 use rand::prelude::{Distribution, SliceRandom};
 use rand::{thread_rng, Rng};
@@ -62,6 +64,7 @@ impl Enemy {
             Mob::Orc => (constitution * 20) + (level * 10),
             Mob::Elf => (constitution * 10) + (level * 10),
             Mob::KingSlime => (constitution * 200) + (level * 50),
+            _ => constitution * 10 + level * 10,
         };
         hp_gain
     }
@@ -72,6 +75,7 @@ impl Enemy {
             Enemy::super_logarithm_scaling(level) as usize
         ])
     }
+
     pub fn weak(mob: Mob, level: u32) -> Enemy {
         Enemy {
             kind: mob.clone(),
@@ -84,7 +88,39 @@ impl Enemy {
             attributes: (&mob).into(),
             items: vec![],
             state: EnemyState::Alive,
-            actions: vec![MobAction::Bite, MobAction::Claw, MobAction::Stab],
+            actions: mob.actions(),
+        }
+    }
+
+    pub fn normal(mob: Mob, level: u32) -> Enemy {
+        Enemy {
+            kind: mob.clone(),
+            level,
+            experience: Enemy::linear_scaling(level * 2),
+            health: Enemy::super_logarithm_scaling(level * 2) as i32,
+            defense: Dice::new(vec![Die::D20.into(); 10].into()),
+            resistance: Dice::new(vec![Die::D20.into(); 10].into()),
+            gold: Enemy::super_logarithm_scaling(level * 2),
+            attributes: (&mob).into(),
+            items: vec![],
+            state: EnemyState::Alive,
+            actions: mob.actions(),
+        }
+    }
+
+    pub fn strong(mob: Mob, level: u32) -> Enemy {
+        Enemy {
+            kind: mob.clone(),
+            level,
+            experience: Enemy::linear_scaling(level * 5),
+            health: Enemy::super_logarithm_scaling(level * 5) as i32,
+            defense: Dice::new(vec![Die::D20.into(); 15].into()),
+            resistance: Dice::new(vec![Die::D20.into(); 15].into()),
+            gold: Enemy::super_logarithm_scaling(level * 5),
+            attributes: (&mob).into(),
+            items: vec![],
+            state: EnemyState::Alive,
+            actions: mob.actions(),
         }
     }
 
@@ -97,12 +133,12 @@ impl Enemy {
             defense: Dice::new(vec![Die::D20.into(); 20].into()),
             resistance: Dice::new(vec![Die::D20.into(); 15].into()),
             gold: Enemy::super_logarithm_scaling(level * 100),
-            attributes: <&Mob as Into<Attributes>>::into((&mob))
+            attributes: <&Mob as Into<Attributes>>::into(&mob)
                 .log_scaling(level)
                 .clone(),
             items: vec![],
             state: EnemyState::Alive,
-            actions: vec![],
+            actions: mob.actions(),
         }
     }
 
@@ -113,9 +149,12 @@ impl Enemy {
         }
     }
 
-    pub fn action(&self) -> AttackType {
+    pub fn action(&self) -> ActionDice {
         let mut rng = thread_rng();
-        self.actions.choose(&mut rng).unwrap().act(&self)
+        self.actions
+            .choose(&mut rng)
+            .expect("No Skill found")
+            .act(&self)
     }
 
     pub fn set_actions(mut self, actions: Vec<MobAction>) -> Enemy {
@@ -147,140 +186,88 @@ impl Default for Enemy {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
+pub enum MobGrade {
+    Weak,
+    Normal,
+    Strong,
+    Boss,
+}
+
+impl MobGrade {
+    pub fn to_enemy(&self, mob: Mob, level: u32) -> Enemy {
+        match self {
+            MobGrade::Weak => Enemy::weak(mob, level),
+            MobGrade::Normal => Enemy::normal(mob, level),
+            MobGrade::Strong => Enemy::strong(mob, level),
+            MobGrade::Boss => Enemy::boss(mob, level),
+        }
+    }
+}
+
+impl rand::prelude::Distribution<MobGrade> for rand::distributions::Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> MobGrade {
+        let grade = rng.gen_range(1..=100);
+        match grade {
+            1..=50 => MobGrade::Weak,
+            51..=80 => MobGrade::Normal,
+            81..=95 => MobGrade::Strong,
+            96..=100 => MobGrade::Boss,
+            _ => MobGrade::Weak,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, ErisDisplayEmoji, ErisMob)]
 pub enum Mob {
+    #[emoji("👹")]
+    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
     Orc,
+    #[emoji("🧝")]
+    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
     Elf,
+    #[emoji("🧟")]
+    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
+    Drow,
     // Bosses
+    #[emoji("👑")]
+    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
     KingSlime,
-}
-
-impl Mob {
-    pub fn generate(&self, character: &Character) -> Enemy {
-        let level_range = thread_rng().gen_range(character.level..character.level + 5);
-        match self {
-            Mob::Orc => Enemy::weak(Mob::Orc, level_range).set_actions(self.actions()),
-            Mob::Elf => Enemy::weak(Mob::Elf, level_range)
-                .set_actions(self.actions())
-                .set_experience_multiple(4),
-            Mob::KingSlime => Enemy::boss(Mob::KingSlime, level_range).set_actions(self.actions()),
-        }
-    }
-
-    pub fn actions(&self) -> Vec<MobAction> {
-        match self {
-            Mob::Orc => vec![MobAction::Bite, MobAction::Claw, MobAction::Stab],
-            Mob::Elf => vec![MobAction::Stab, MobAction::FireBall],
-            Mob::KingSlime => vec![
-                MobAction::SlimeAbsorb,
-                MobAction::SlimeBall,
-                MobAction::SlimePunch,
-            ],
-        }
-    }
-
-    pub fn alignment(&self) -> Alignment {
-        match self {
-            Mob::Orc => Alignment::ChaoticEvil,
-            Mob::Elf => Alignment::LawfulGood,
-            Mob::KingSlime => Alignment::NeutralEvil,
-        }
-    }
-
-    pub fn vulnerability(&self) -> Option<DamageType> {
-        match self {
-            Mob::Orc => Some(DamageType::Fire),
-            Mob::Elf => Some(DamageType::Iron),
-            _ => None,
-        }
-    }
-}
-
-impl Display for Mob {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Mob::Orc => write!(f, "Orc 🧌"),
-            Mob::Elf => write!(f, "Elf 🧝"),
-            Mob::KingSlime => write!(f, "King Slime 👑"),
-        }
-    }
 }
 
 impl Distribution<Mob> for Standard {
     fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Mob {
-        match rng.gen_range(0..=1000) {
-            // rand 0.8
-            0..=100 => Mob::Elf,
-            101..=102 => Mob::KingSlime,
+        let mob = rng.gen_range(1..=100);
+        match mob {
+            1..=50 => Mob::Orc,
+            51..=80 => Mob::Elf,
+            81..=95 => Mob::Drow,
+            96..=100 => Mob::KingSlime,
             _ => Mob::Orc,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-pub enum MobAction {
-    Bite,
-    Claw,
-    Stab,
-    FireBall,
-    SlimePunch,
-    SlimeBall,
-    SlimeAbsorb,
+impl Mob {
+    pub fn generate(&self, character: &Character) -> Enemy {
+        let level_range = thread_rng().gen_range(character.level..character.level + 5);
+        let enemy: Enemy = self.grade().to_enemy(self.clone(), level_range);
+        enemy
+    }
 }
 
-impl MobAction {
-    pub fn act(&self, enemy: &Enemy) -> AttackType {
-        let attack_dice = |d, n| Dice::new(vec![d; n]);
-        let die = |attribute: Attribute, level| {
-            let default_scale = |n: u32| ((n as f64).ln().powf(2.0)).floor() as u32;
-            (default_scale(attribute.inner()) as usize + default_scale(level) as usize).min(1)
-        };
-        match self {
-            MobAction::Bite => AttackType::Physical(
-                attack_dice(Die::D20.into(), die(enemy.attributes.strength, enemy.level)).roll(),
-            ),
-            MobAction::Claw => AttackType::Physical(
-                attack_dice(
-                    Die::D6.into(),
-                    3 * die(enemy.attributes.dexterity, enemy.level),
-                )
-                .roll(),
-            ),
-            MobAction::Stab => AttackType::Physical(
-                attack_dice(
-                    Die::D12.into(),
-                    2 * die(enemy.attributes.dexterity, enemy.level),
-                )
-                .roll(),
-            ),
-            MobAction::FireBall => AttackType::Magical(
-                attack_dice(
-                    Die::D20.into(),
-                    die(enemy.attributes.intelligence, enemy.level),
-                )
-                .roll(),
-            ),
-            MobAction::SlimePunch => AttackType::Physical(
-                attack_dice(
-                    Die::D20.into(),
-                    die(enemy.attributes.dexterity, enemy.level * 10),
-                )
-                .roll(),
-            ),
-            MobAction::SlimeBall => AttackType::Magical(
-                attack_dice(
-                    Die::D20.into(),
-                    die(enemy.attributes.intelligence, enemy.level * 10),
-                )
-                .roll(),
-            ),
-            MobAction::SlimeAbsorb => AttackType::Magical(
-                attack_dice(
-                    Die::D100.into(),
-                    die(enemy.attributes.wisdom, enemy.level * 10),
-                )
-                .roll(),
-            ),
-        }
+#[cfg(test)]
+mod test {
+
+    use super::*;
+    #[test]
+    fn ttt() {
+        let mob = crate::enemies::Mob::Elf;
+        let t = mob.alignment();
+        assert_eq!(t, Alignment::LawfulGood);
+        let t = mob.grade();
+        assert_eq!(t, MobGrade::Normal);
+        let t = mob.actions();
+        assert_eq!(t, vec![MobAction::FireBall]);
     }
 }

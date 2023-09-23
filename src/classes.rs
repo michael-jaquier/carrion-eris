@@ -1,53 +1,29 @@
-use crate::player::PlayerAction;
+use crate::skills::Skill;
 use crate::CarrionError;
+use eris_macro::{ErisDisplayEmoji, ErisValidEnum};
+use heck::ToTitleCase;
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy)]
+#[derive(
+    Debug, Clone, PartialEq, Serialize, Deserialize, Copy, ErisValidEnum, ErisDisplayEmoji,
+)]
 pub enum Classes {
+    #[emoji("⚔️")]
     Warrior,
+    #[emoji("🧙‍♂️")]
     Wizard,
+    #[emoji("🧙‍♀️")]
     Sorcerer,
 }
 
 impl Classes {
-    pub fn valid_classes() -> String {
-        let all = vec![Classes::Warrior, Classes::Wizard, Classes::Sorcerer];
-        all.iter()
-            .map(|t| format!("{}", t))
-            .collect::<Vec<String>>()
-            .join("\n ")
-    }
-    pub fn action(&self) -> PlayerAction {
+    pub fn action(&self) -> Skill {
         match self {
-            Classes::Warrior => PlayerAction::Slash,
-            Classes::Wizard => PlayerAction::MagicMissile,
-            Classes::Sorcerer => PlayerAction::FireBall,
-        }
-    }
-}
-
-impl TryFrom<String> for Classes {
-    type Error = CarrionError;
-
-    fn try_from(value: String) -> Result<Self, Self::Error> {
-        match value.to_lowercase().as_str() {
-            "warrior" => Ok(Classes::Warrior),
-            "wizard" => Ok(Classes::Wizard),
-            "sorcerer" => Ok(Classes::Sorcerer),
-            _ => Err(CarrionError::ParseError(
-                "Unable to parse class".to_string(),
-            )),
-        }
-    }
-}
-
-impl Display for Classes {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Classes::Warrior => write!(f, "Warrior 🪖"),
-            Classes::Wizard => write!(f, "Wizard 🧙"),
-            Classes::Sorcerer => write!(f, "Sorcerer 🧙"),
+            Classes::Warrior => Skill::Slash,
+            Classes::Wizard => Skill::MagicMissile,
+            Classes::Sorcerer => Skill::FireBall,
+            _ => Skill::Slash,
         }
     }
 }

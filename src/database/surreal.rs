@@ -15,6 +15,7 @@ static DB: Lazy<Surreal<Any>> = Lazy::new(Surreal::init);
 pub static CHARACTER_TABLE: &str = "characters";
 pub static ENEMY_TABLE: &str = "enemies";
 
+pub static SKILL_TABLE: &str = "skills";
 pub struct SurrealDB {}
 impl SurrealDB {
     pub async fn connect(address: &str) -> CarrionResult<()> {

@@ -95,8 +95,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::help(),
             commands::create(),
             commands::character_trait(),
-            commands::delete_character(),
+            commands::delete(),
             commands::me(),
+            commands::skill(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),

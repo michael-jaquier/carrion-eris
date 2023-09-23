@@ -1,4 +1,4 @@
-use crate::dice::{AdvantageState, Dice, Die, DieObject};
+use crate::dice::{AdvantageState, Die, DieObject};
 use crate::units::Alignment;
 use crate::units::Attributes;
 use crate::CarrionError;

@@ -1,7 +1,7 @@
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
-use crate::enemies::{Enemy, Mob};
-use crate::player::Character;
+use crate::enemies::{Enemy, Mob, MobGrade};
+use crate::player::{Character, SkillSet};
 
 use rand::random;
 use serde::{Deserialize, Serialize};
@@ -9,8 +9,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 
 use crate::BattleInfo;
-use tracing::{debug, info, warn};
-use tracing_subscriber::fmt::init;
+use tracing::{debug, warn};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BattleResult {
@@ -124,11 +123,19 @@ impl Display for BattleResult {
             string.push_str("\t✨")
         }
 
+        string.push_str("\n\t");
+        string.push_str("🏺\t");
+        string.push_str(&format!(
+            "You gained {} skill xp!",
+            self.result.last().unwrap().skill_experience_gained
+        ));
+        string.push_str("\t🏺");
+
         if traits > 0 {
             string.push_str("\n\t");
-            string.push_str("🏺\t");
+            string.push_str("🪙\t");
             string.push_str(&format!("You have trait {} points to spend!", traits));
-            string.push_str("\t🏺")
+            string.push_str("\t🪙")
         }
         string.push_str("\n🗡️\n");
 
@@ -137,12 +144,12 @@ impl Display for BattleResult {
 }
 
 async fn single_turn(character: &mut Character, enemy: &mut Enemy) -> BattleInfo {
-    let result = character.player_attack(enemy);
+    let result = character.player_attack(enemy).await;
     // If the enemy is dead they should not act
     if enemy.alive() {
         character.enemy_attack(&enemy);
     }
-    result
+    result.expect("Failed to get result")
 }
 
 async fn battle(mut character: &mut Character) -> BattleResult {
@@ -189,12 +196,28 @@ pub async fn all_battle() -> BattleResults {
                     let _ = SurrealProducer::create_or_update_character(character).await;
                     continue;
                 }
+
+                let character_skill = SurrealConsumer::get_skill(&character, 999)
+                    .await
+                    .expect("Failed to get skill");
+
+                character.curent_skill =
+                    character_skill.unwrap_or(SkillSet::new(character.class.action()));
                 let result = battle(&mut character).await;
                 results.append_result(result);
 
                 if character.hp > character.max_hp as i32 {
                     warn!("Character: {:?} has more hp than max_hp", character)
                 }
+
+                SurrealProducer::set_current_skill(character.curent_skill.clone(), &character)
+                    .await
+                    .expect("Failed to set current skill");
+
+                SurrealProducer::create_or_update_skill(character.curent_skill.clone(), &character)
+                    .await
+                    .expect("Failed to update skill");
+
                 SurrealProducer::create_or_update_character(character)
                     .await
                     .expect("Failed to update character");

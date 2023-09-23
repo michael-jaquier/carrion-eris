@@ -1,52 +1,51 @@
 use crate::enemies::Enemy;
-use crate::player::{ActionDice, Character, PlayerAction};
+use crate::player::{ActionDice, Character, SkillSet};
 use crate::traits::{TraitMutation, TraitMutations};
 use std::ops::Div;
 
 use crate::dice::{AdvantageState, Dice, Die, DieObject};
+use crate::skills::Skill;
+use crate::EnemyEvents;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
 pub struct AttackModifiers {
-    DiceSet: ActionDice,
+    dice_set: ActionDice,
     player: Character,
+    skill: SkillSet,
     enemy: Enemy,
 }
 
 impl AttackModifiers {
-    pub fn new(
-       dice_set: ActionDice,
-        player: &Character,
-        enemy: &Enemy,
-    ) -> Self {
+    pub fn new(dice_set: ActionDice, player: &Character, enemy: &Enemy, skill: &SkillSet) -> Self {
         Self {
-            DiceSet: dice_set,
+            dice_set,
             player: player.clone(),
             enemy: enemy.clone(),
+            skill: skill.clone(),
         }
     }
-    pub fn builder(player: &Character, enemy: &Enemy) -> AttackModifiers {
-        AttackModifiers::new(Default::default(), player, enemy)
+    pub fn builder(player: &Character, enemy: &Enemy, skill: &SkillSet) -> AttackModifiers {
+        AttackModifiers::new(Default::default(), player, enemy, skill)
             .apply_skill_base(&player)
             .apply_vulnerability(enemy, &player.class.action())
             .clone()
     }
 
     fn physical_mut(&mut self) -> Option<&mut Dice> {
-        self.DiceSet.physical_mut()
+        self.dice_set.physical_mut()
     }
 
     fn magical_mut(&mut self) -> Option<&mut Dice> {
-        self.DiceSet.magical_mut()
+        self.dice_set.magical_mut()
     }
 
     fn physical(&self) -> Option<&Dice> {
-        self.DiceSet.physical()
+        self.dice_set.physical()
     }
 
     fn magical(&self) -> Option<&Dice> {
-        self.DiceSet.magical()
+        self.dice_set.magical()
     }
 
     fn set_advantage_state(&mut self, advantage: AdvantageState) {
@@ -55,15 +54,15 @@ impl AttackModifiers {
                 if let Some(d) = &mut self.physical_mut() {
                     d.advantage();
                 }
-                if let Some( d) = self.magical_mut().as_mut() {
+                if let Some(d) = self.magical_mut().as_mut() {
                     d.advantage();
                 }
             }
             AdvantageState::Disadvantage => {
-                if let Some( d) = self.physical_mut().as_mut() {
+                if let Some(d) = self.physical_mut().as_mut() {
                     d.disadvantage();
                 }
-                if let Some( d) = self.magical_mut().as_mut() {
+                if let Some(d) = self.magical_mut().as_mut() {
                     d.disadvantage();
                 }
             }
@@ -141,20 +140,15 @@ impl AttackModifiers {
     }
 
     fn apply_skill_base(&mut self, player: &Character) -> &mut AttackModifiers {
-        let skill = player.class.action();
-        self.DiceSet = skill.action_base_damage(player);
+        self.dice_set = self.skill.action_base_damage(player);
         self
     }
 
-    fn apply_vulnerability(
-        &mut self,
-        enemy: &Enemy,
-        action: &PlayerAction,
-    ) -> &mut AttackModifiers {
+    fn apply_vulnerability(&mut self, enemy: &Enemy, action: &Skill) -> &mut AttackModifiers {
         if let Some(vulnerability) = enemy.kind.vulnerability() {
             if let Some(action_element) = crate::ElementalScaling::scaling(action) {
                 if action_element == vulnerability {
-                    self.add_existing_die(vec![Die::D4.into(); 2])
+                    self.add_existing_die(vec![Die::D10.into(); 2])
                 }
             }
         }
@@ -228,8 +222,9 @@ impl AttackModifiers {
 impl Default for AttackModifiers {
     fn default() -> Self {
         Self {
-            DiceSet: Default::default(),
+            dice_set: Default::default(),
             player: Default::default(),
+            skill: Default::default(),
             enemy: Default::default(),
         }
     }
@@ -358,16 +353,17 @@ impl From<&mut Character> for DefenseModifiers {
 
 #[cfg(test)]
 mod test {
+
     use crate::classes::Classes;
     use crate::mutators::AttackModifiers;
-    use crate::player::Character;
+    use crate::player::{Character, SkillSet};
 
     #[test]
     fn magic_missile_dps() {
         let mut player = Character::new("test".to_string(), 1, Classes::Wizard);
 
         let enemy = crate::enemies::Enemy::weak(crate::enemies::Mob::Orc, 1);
-        let mut attack = AttackModifiers::builder(&player, &enemy);
+        let mut attack = AttackModifiers::builder(&player, &enemy, &SkillSet::default());
 
         let ten_thousand_rolls = (0..10000)
             .map(|_| attack.generate_damage_values())

@@ -1,6 +1,6 @@
 use crate::classes::Classes;
 use crate::enemies::Mob;
-use crate::AttributeScaling;
+
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
 use std::ops::{Add, Deref, Sub};
@@ -96,6 +96,11 @@ impl From<&Mob> for Attributes {
                 ca.wisdom = Attribute::Wisdom(22);
                 ca.strength = Attribute::Strength(22);
                 ca.constitution = Attribute::Constitution(22);
+            }
+            _ => {
+                ca.dexterity = Attribute::Dexterity(22);
+                ca.constitution = Attribute::Constitution(15);
+                ca.charisma = Attribute::Charisma(20);
             }
         }
         ca
@@ -300,6 +305,23 @@ pub enum Alignment {
     ChaoticGood,
     ChaoticNeutral,
     ChaoticEvil,
+}
+
+impl From<&str> for Alignment {
+    fn from(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "lawfulgood" => Alignment::LawfulGood,
+            "lawfulneutral" => Alignment::LawfulNeutral,
+            "lawfulevil" => Alignment::LawfulEvil,
+            "neutralgood" => Alignment::NeutralGood,
+            "trueneutral" => Alignment::TrueNeutral,
+            "neutralevil" => Alignment::NeutralEvil,
+            "chaoticgood" => Alignment::ChaoticGood,
+            "chaoticneutral" => Alignment::ChaoticNeutral,
+            "chaoticevil" => Alignment::ChaoticEvil,
+            _ => panic!("Invalid alignment"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

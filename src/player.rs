@@ -1,29 +1,26 @@
 use crate::enemies::{Enemy, EnemyState};
-use crate::{log_power_scale, AttributeScaling, BattleInfo, ElementalScaling};
+use crate::{log_power_scale, AttributeScaling, BattleInfo, CarrionResult, ElementalScaling};
 
 use serde::{Deserialize, Serialize};
 
 use crate::classes::Classes;
 use crate::mutators::{AttackModifiers, DefenseModifiers};
 use crate::traits::{CharacterTraits, TraitMutations};
-use crate::units::{AttackType, Attribute, Attributes};
+use crate::units::{AttackType, Attributes};
 use std::collections::HashSet;
 
-use eris_macro::{AttributeScaling, ElementalScaling, ErisTitleCase};
-use heck::ToTitleCase;
 use rand::{thread_rng, Rng};
-use serenity::model::guild::automod::ActionType;
+
 use std::fmt::Display;
 
 use crate::dice::{AdvantageState, Dice, Die, DieObject};
-use crate::units::DamageType;
+use crate::skills::Skill;
 use tracing::log::debug;
-use tracing::{warn, Instrument};
+use tracing::warn;
 
 pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
 pub type PhysicalDice = Option<Dice>;
-
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct ActionDice {
@@ -41,7 +38,6 @@ impl Default for ActionDice {
 }
 
 impl ActionDice {
-
     pub fn physical_mut(&mut self) -> Option<&mut Dice> {
         self.physical.as_mut()
     }
@@ -55,7 +51,7 @@ impl ActionDice {
     pub fn magical(&self) -> Option<&Dice> {
         self.magical.as_ref()
     }
-    fn add_existing_die(&mut self, die: Vec<DieObject>) {
+    pub fn add_existing_die(&mut self, die: Vec<DieObject>) {
         if self.physical.is_some() && self.magical.is_some() {
             for d in die {
                 let choice = thread_rng().gen_bool(0.5);
@@ -93,108 +89,84 @@ impl ActionDice {
     }
 }
 
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, AttributeScaling, ElementalScaling)]
-pub enum PlayerAction {
-    #[stat("intelligence")]
-    #[element("physical")]
-    Slash,
-    #[element("arcane")]
-    #[stat("intelligence")]
-    MagicMissile,
-    #[element("fire")]
-    #[stat("intelligence")]
-    FireBall,
-    #[element("water")]
-    #[stat("intelligence")]
-    WaterBall,
-    #[element("earth")]
-    #[stat("constitution")]
-    EarthShatter,
-}
-
-impl Display for PlayerAction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let string = format!("{:?}", self);
-        write!(f, "{}", string.to_title_case())
+impl From<Skill> for SkillSet {
+    fn from(value: Skill) -> Self {
+        Self::new(value)
     }
 }
 
-impl PlayerAction {
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct SkillSet {
+    pub(crate) skill: Skill,
+    pub(crate) experience: u64,
+    pub(crate) active: bool,
+    pub(crate) level: u32,
+}
+impl Default for SkillSet {
+    fn default() -> Self {
+        Self {
+            skill: Skill::Slash,
+            experience: 0,
+            active: false,
+            level: 1,
+        }
+    }
+}
+
+impl Display for SkillSet {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let mut string = String::new();
+        string.push_str("```");
+        string.push_str("\n");
+        string.push_str(&format!("Skill: {}\n", self.skill));
+        string.push_str(&format!("Level: {}\n", self.level));
+        string.push_str(&format!("Experience: {}\n", self.experience));
+        string.push_str("\n");
+        string.push_str("```");
+        write!(f, "{}", string)
+    }
+}
+
+impl SkillSet {
+    pub fn new(skill: Skill) -> Self {
+        Self {
+            skill: skill.clone(),
+            experience: 0,
+            active: true,
+            level: 1,
+        }
+    }
+
+    pub fn skill(&self) -> Skill {
+        self.skill.clone()
+    }
     pub fn damage(&self, modifiers: AttackModifiers) -> u32 {
         modifiers.generate_damage_values()
     }
 
     pub fn act(&self, player: &Character, enemy: &Enemy) -> u32 {
-        self.damage(AttackModifiers::builder(player, enemy))
+        self.damage(AttackModifiers::builder(player, enemy, self))
     }
-
-    fn attribute(&self, base_die: &mut ActionDice, attributes: &Attributes) {
-        let n = if let Some(attribute) = AttributeScaling::scaling(self) {
-            let attribute_value = attributes.get(&attribute);
-            log_power_scale(attribute_value, None)
-        } else {
-            0
-        } as usize;
-
-        if let Some(attribute) = AttributeScaling::scaling(self) {
-            match attribute {
-                Attribute::Strength(_) => {
-                    base_die.physical = Some(Dice::new(vec![Die::D20.into(); 1 + n]));
-                }
-                Attribute::Intelligence(_) => {
-                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 4 + n]));
-                }
-                Attribute::Dexterity(_) => {
-                    base_die.physical = Some(Dice::new(vec![Die::D12.into(); 2 + 2 * n]));
-                }
-                Attribute::Constitution(_) => {
-                    base_die.physical = Some(Dice::new(vec![Die::D4.into(); 4 + 3 * n]));
-                    base_die.magical = Some(Dice::new(vec![Die::D4.into(); 2 + 3 * n]));
-                }
-                Attribute::Wisdom(_) => {
-                    base_die.magical = Some(Dice::new(vec![Die::D6.into(); 4 + 2 * n]));
-                }
-                Attribute::Charisma(_) => {
-                    base_die.magical = Some(Dice::new(vec![Die::D8.into(); 3 + 2 * n]));
-                }
-            };
-        };
-    }
-
-    fn elemental(&self, base_die: &mut ActionDice) {
-        if let Some(elemental) = ElementalScaling::scaling(self) {
-            match elemental {
-                DamageType::Fire => {
-                    base_die.set_critical_state(AdvantageState::Advantage);
-                }
-                DamageType::Water => {}
-                DamageType::Earth => {}
-                DamageType::Air => {}
-                DamageType::Light => {}
-                DamageType::Dark => {}
-                DamageType::Iron => {}
-                DamageType::Arcane => {}
-                DamageType::Holy => {
-                    base_die.set_critical_state(AdvantageState::Advantage);
-                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 2]));
-                }
-                DamageType::NonElemental => {}
-                DamageType::Physical => {}
-            }
-        }
+    pub fn experience_to_next_level(&self) -> u64 {
+        log_power_scale(self.level, Some(5.0)) as u64
     }
 
     pub fn action_base_damage(&self, player: &Character) -> ActionDice {
         let mut base_die = ActionDice::default();
-        self.attribute(&mut base_die, &player.attributes);
-        self.elemental(&mut base_die);
+        self.skill.attribute(&mut base_die, &player.attributes);
+        self.skill.elemental(&mut base_die);
         self.action_level_scaling(&mut base_die, player);
         base_die
     }
 
     pub fn action_level_scaling(&self, base_die: &mut ActionDice, player: &Character) {
         let scaling = log_power_scale(player.level, Some(1.1)) as usize;
+        let additional_die = vec![Die::D4.into(); scaling];
+        base_die.add_existing_die(additional_die);
+    }
+
+    pub fn action_experience_scaling(&self, base_die: &mut ActionDice) {
+        let scaling = log_power_scale(self.level, Some(1.1)) as usize;
         let additional_die = vec![Die::D4.into(); scaling];
         base_die.add_existing_die(additional_die);
     }
@@ -212,6 +184,7 @@ pub struct Character {
     pub(crate) attributes: Attributes,
     pub(crate) traits: HashSet<CharacterTraits>,
     pub(crate) available_traits: u32,
+    pub(crate) curent_skill: SkillSet,
 }
 
 impl Default for Character {
@@ -227,6 +200,7 @@ impl Default for Character {
             attributes: Attributes::default(),
             traits: HashSet::new(),
             available_traits: 0,
+            curent_skill: SkillSet::default(),
         }
     }
 }
@@ -255,10 +229,11 @@ impl Character {
             attributes: (&class).into(),
             traits: HashSet::new(),
             available_traits: 0,
+            curent_skill: SkillSet::default(),
         }
     }
 
-    pub fn hp_gain(&self, level: u32) -> u32 {
+    pub fn hp_gain(&self, _level: u32) -> u32 {
         let constitution = self.attributes.constitution.inner();
         let hp_gain = match self.class {
             Classes::Warrior => (constitution * 10) + 10,
@@ -282,10 +257,8 @@ impl Character {
         self.hp = self.max_hp as i32;
     }
 
-    pub fn player_attack(&mut self, enemy: &mut Enemy) -> BattleInfo {
-        let action = self.class.action();
-        let mut damage = action.act(&self, enemy);
-
+    pub async fn player_attack(&mut self, enemy: &mut Enemy) -> CarrionResult<BattleInfo> {
+        let mut damage = self.curent_skill.act(self, enemy);
         if enemy.defense.success() {
             let suppress = (enemy.defense.roll()).min(90);
             let suppress_quantity = damage as f64 * suppress as f64 / 100.0;
@@ -309,10 +282,21 @@ impl Character {
                     self.available_traits += 1;
                 }
             }
+            self.curent_skill.experience += enemy.experience as u64;
+            while self.curent_skill.experience
+                >= self.curent_skill.experience_to_next_level() as u64
+            {
+                self.curent_skill.level += 1;
+                self.curent_skill.experience = self
+                    .curent_skill
+                    .experience
+                    .checked_sub(self.curent_skill.experience_to_next_level())
+                    .unwrap_or(0);
+            }
         }
 
-        BattleInfo {
-            action,
+        let binfo = BattleInfo {
+            action: self.curent_skill.skill.clone(),
             damage: damage as i32,
             player_name: self.name.clone(),
             monster_name: enemy.kind.to_string(),
@@ -325,7 +309,10 @@ impl Character {
                 .experience_to_next_level()
                 .checked_sub(self.experience)
                 .unwrap_or(0),
-        }
+            experience_gained: enemy.experience,
+            skill_experience_gained: enemy.experience,
+        };
+        Ok(binfo)
     }
 
     pub fn enemy_attack(&mut self, enemy: &Enemy) {
@@ -335,23 +322,21 @@ impl Character {
             return;
         }
 
-        match action {
-            AttackType::Physical(damage) => {
-                let mitigated_damage =
-                    damage - (damage as f64 * defense.physical_mitigation()) as u32;
-                if mitigated_damage < 0 {
-                    warn!("{} has negative Physical damage!", self.name);
-                }
-                self.hp -= mitigated_damage as i32;
+        if action.physical().is_some() {
+            let damage = action.physical().unwrap().roll();
+            let mitigated_damage = damage - (damage as f64 * defense.physical_mitigation()) as u32;
+            if mitigated_damage < 0 {
+                warn!("{} has negative Physical damage!", self.name);
             }
-
-            AttackType::Magical(damage) => {
-                let mitigated_damage = damage - (damage as f64 * defense.magical_suppress()) as u32;
-                if mitigated_damage < 0 {
-                    warn!("{} has negative Magical damage!", self.name);
-                }
-                self.hp -= mitigated_damage as i32;
+            self.hp -= mitigated_damage as i32;
+        }
+        if action.magical().is_some() {
+            let damage = action.magical().unwrap().roll();
+            let mitigated_damage = damage - (damage as f64 * defense.magical_suppress()) as u32;
+            if mitigated_damage < 0 {
+                warn!("{} has negative Magical damage!", self.name);
             }
+            self.hp -= mitigated_damage as i32;
         }
 
         if self.hp > self.max_hp as i32 {
@@ -400,16 +385,16 @@ mod test {
 
     #[test]
     fn player_action_print() {
-        use crate::player::PlayerAction;
-        let action = PlayerAction::MagicMissile;
+        use crate::skills::Skill;
+        let action = Skill::MagicMissile;
         assert_eq!(action.to_string(), "Magic Missile");
     }
 
     #[test]
     fn player_action_attributes() {
         use crate::classes::Classes;
-        use crate::player::PlayerAction;
-        let action = PlayerAction::MagicMissile;
+        use crate::skills::Skill;
+        let action = Skill::MagicMissile;
         let element = ElementalScaling::scaling(&action);
         let attribute = AttributeScaling::scaling(&action);
         assert_eq!(element, Some(Arcane));

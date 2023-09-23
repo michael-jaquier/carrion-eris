@@ -7,6 +7,7 @@ pub mod enemies;
 pub mod items;
 pub mod mutators;
 pub mod player;
+pub mod skills;
 pub mod traits;
 pub mod units;
 
@@ -16,15 +17,13 @@ type CarrionResult<T> = Result<T, CarrionError>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, State, Error>;
 
-use rand::Rng;
 use serde::{Deserialize, Serialize};
 
 use surrealdb::sql::Thing;
 use thiserror::Error;
 
-use crate::player::PlayerAction;
+use skills::Skill;
 
-use crate::units::DamageType;
 use std::fmt::{Display, Formatter};
 
 #[derive(Error, Debug)]
@@ -47,7 +46,7 @@ pub struct Record {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BattleInfo {
-    pub action: PlayerAction,
+    pub action: Skill,
     pub damage: i32,
     pub player_name: String,
     pub monster_name: String,
@@ -57,11 +56,13 @@ pub struct BattleInfo {
     pub monster_hp: i32,
     pub traits_available: u32,
     pub next_level: u32,
+    pub experience_gained: u32,
+    pub skill_experience_gained: u32,
 }
 
 impl BattleInfo {
     pub fn new(
-        action: PlayerAction,
+        action: Skill,
         damage: i32,
         player_name: String,
         monster_name: String,
@@ -83,6 +84,8 @@ impl BattleInfo {
             monster_hp,
             traits_available,
             next_level,
+            experience_gained: 0,
+            skill_experience_gained: 0,
         }
     }
 }
@@ -139,4 +142,17 @@ trait ElementalScaling {
 pub fn log_power_scale(n: u32, power: Option<f64>) -> u32 {
     let default_scale = |n: u32| ((n as f64).ln().powf(power.unwrap_or(1.1))).floor() as u32;
     default_scale(n)
+}
+
+trait ValidEnum {
+    fn valid() -> String;
+}
+
+trait EnemyEvents {
+    fn grade(&self) -> crate::enemies::MobGrade;
+    fn actions(&self) -> Vec<crate::skills::MobAction>;
+
+    fn alignment(&self) -> crate::units::Alignment;
+
+    fn vulnerability(&self) -> Option<crate::units::DamageType>;
 }

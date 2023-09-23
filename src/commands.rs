@@ -1,11 +1,12 @@
+use crate::classes::Classes;
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
 use crate::player::Character;
-use crate::{Context, Error};
-
-use crate::classes::Classes;
+use crate::skills::Skill;
 use crate::traits::CharacterTraits;
-use tracing::info;
+use crate::ValidEnum;
+use crate::{Context, Error};
+use tracing::{debug, info, warn};
 
 /// Show this help menu
 #[poise::command(prefix_command, track_edits, slash_command)]
@@ -93,13 +94,15 @@ pub async fn character_trait(
 }
 /// Delete your character and start over
 #[poise::command(prefix_command, slash_command)]
-pub async fn delete_character(
+pub async fn delete(
     ctx: Context<'_>,
     #[autocomplete = "poise::builtins::autocomplete_command"] command: Option<String>,
 ) -> Result<(), Error> {
     info!("delete_character");
     info!("Command: {:?}", command);
     let e = SurrealProducer::delete_character(ctx.author().id.0).await?;
+    let x = SurrealProducer::drop_character_skills(ctx.author().id.0).await?;
+    debug!("Delete: {:?} {:?}", e, x);
     match e {
         None => {
             ctx.reply(format!("No character to delete")).await?;
@@ -151,7 +154,7 @@ pub async fn create(
                 }
             }
             Err(_) => {
-                let valid_classes = Classes::valid_classes();
+                let valid_classes = Classes::valid();
                 ctx.send(|b| {
                     b.content(format!(
                         "Invalid class: {:?}\n Valid Classes:\n {}",
@@ -163,7 +166,7 @@ pub async fn create(
             }
         }
     } else {
-        let valid_classes = Classes::valid_classes();
+        let valid_classes = Classes::valid();
         ctx.send(|b| {
             b.content(format!(
                 "No class provided\n Valid Classes:\n {}",
@@ -183,7 +186,7 @@ pub async fn me(
     ctx: Context<'_>,
     #[autocomplete = "poise::builtins::autocomplete_command"]
     #[description = "Create a character form the list of valid classes"]
-    command: Option<String>,
+    _command: Option<String>,
 ) -> Result<(), Error> {
     let user_id = ctx.author().id.0;
     let character = SurrealConsumer::get_character(user_id).await?;
@@ -198,6 +201,78 @@ pub async fn me(
         None => {
             ctx.send(|b| b.content(format!("No character found")).ephemeral(true))
                 .await?;
+        }
+    }
+    Ok(())
+}
+
+/// Change your skill
+#[poise::command(prefix_command, slash_command)]
+pub async fn skill(
+    ctx: Context<'_>,
+    #[autocomplete = "poise::builtins::autocomplete_command"]
+    #[description = "Create a character form the list of valid classes"]
+    command: Option<String>,
+) -> Result<(), Error> {
+    let user_id = ctx.author().id.0;
+    match command {
+        Some(command) => {
+            let skill = Skill::try_from(command);
+            match skill {
+                Ok(skill) => {
+                    let has_skill = SurrealConsumer::get_skill_id(user_id, skill.clone() as u64)
+                        .await
+                        .expect("Failed to get skill");
+                    match has_skill {
+                        Some(skill) => {
+                            let set_skill = SurrealProducer::set_current_skill_id(skill, user_id)
+                                .await
+                                .expect("Failed to set skill");
+
+                            ctx.send(|b| {
+                                b.content(format!("Skill set: {:}", set_skill))
+                                    .ephemeral(true)
+                            })
+                            .await?;
+                        }
+                        None => {
+                            let set_skill =
+                                SurrealProducer::set_current_skill_id(skill.into(), user_id)
+                                    .await
+                                    .expect("Failed to set skill");
+                            let _valid_skills = Skill::valid();
+                            ctx.send(|b| {
+                                b.content(format!("Skill set: {:}\n", set_skill))
+                                    .ephemeral(true)
+                            })
+                            .await?;
+                        }
+                    }
+                }
+                Err(err) => {
+                    warn!("Invalid skill: {:?}", err);
+                    ctx.send(|b| {
+                        b.content(format!(
+                            "Invalid skill: {:?}\n Valid Skills:\n {}",
+                            err,
+                            Skill::valid()
+                        ))
+                        .ephemeral(true)
+                    })
+                    .await?;
+                }
+            }
+        }
+        None => {
+            let valid_skills = Skill::valid();
+            ctx.send(|b| {
+                b.content(format!(
+                    "No skill chosen\n Valid Skills:\n {}",
+                    valid_skills
+                ))
+                .ephemeral(true)
+            })
+            .await?;
         }
     }
     Ok(())

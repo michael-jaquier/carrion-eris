@@ -6,6 +6,7 @@ use crate::skills::Skill;
 use crate::traits::CharacterTraits;
 use crate::ValidEnum;
 use crate::{Context, Error};
+use tracing::field::debug;
 use tracing::{debug, info, warn};
 
 /// Show this help menu
@@ -102,7 +103,8 @@ pub async fn delete(
     info!("Command: {:?}", command);
     let e = SurrealProducer::delete_character(ctx.author().id.0).await?;
     let x = SurrealProducer::drop_character_skills(ctx.author().id.0).await?;
-    debug!("Delete: {:?} {:?}", e, x);
+    let y = SurrealProducer::delete_enemy_uid(ctx.author().id.0).await?;
+    info!(?e, ?x, ?y);
     match e {
         None => {
             ctx.reply(format!("No character to delete")).await?;
@@ -265,14 +267,13 @@ pub async fn skill(
         }
         None => {
             let valid_skills = Skill::valid();
-            ctx.send(|b| {
-                b.content(format!(
-                    "No skill chosen\n Valid Skills:\n {}",
-                    valid_skills
-                ))
-                .ephemeral(true)
-            })
-            .await?;
+            let current_skill = SurrealConsumer::get_current_skill(user_id).await?;
+            let mut responses = String::new();
+            if let Some(current_skill) = current_skill {
+                responses.push_str(&format!("Current Skill: {}\n", current_skill));
+            }
+            responses.push_str(&format!("Valid Skills:\n {}", valid_skills));
+            ctx.send(|b| b.content(responses).ephemeral(true)).await?;
         }
     }
     Ok(())

@@ -273,6 +273,9 @@ pub enum DamageType {
     Holy,
     NonElemental,
     Physical,
+    Hope,
+    Despair,
+    Existential,
 }
 
 impl From<&str> for DamageType {
@@ -289,6 +292,9 @@ impl From<&str> for DamageType {
             "holy" => DamageType::Holy,
             "nonelemental" => DamageType::NonElemental,
             "physical" => DamageType::Physical,
+            "hope" => DamageType::Hope,
+            "despair" => DamageType::Despair,
+            "existential" => DamageType::Existential,
             _ => panic!("Invalid damage type"),
         }
     }

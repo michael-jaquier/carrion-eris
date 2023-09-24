@@ -1,5 +1,8 @@
 use crate::enemies::{Enemy, EnemyState};
-use crate::{log_power_scale, AttributeScaling, BattleInfo, CarrionResult, ElementalScaling};
+use crate::{
+    ln_power_power_power_scale, log_power_power_scale, log_power_scale, AttributeScaling,
+    BattleInfo, CarrionResult, ElementalScaling,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -148,7 +151,7 @@ impl SkillSet {
         self.damage(AttackModifiers::builder(player, enemy, self))
     }
     pub fn experience_to_next_level(&self) -> u64 {
-        log_power_scale(self.level, Some(5.0)) as u64
+        ln_power_power_power_scale(self.level) as u64
     }
 
     pub fn action_base_damage(&self, player: &Character) -> ActionDice {
@@ -184,7 +187,7 @@ pub struct Character {
     pub(crate) attributes: Attributes,
     pub(crate) traits: HashSet<CharacterTraits>,
     pub(crate) available_traits: u32,
-    pub(crate) curent_skill: SkillSet,
+    pub(crate) current_skill: SkillSet,
 }
 
 impl Default for Character {
@@ -200,7 +203,7 @@ impl Default for Character {
             attributes: Attributes::default(),
             traits: HashSet::new(),
             available_traits: 0,
-            curent_skill: SkillSet::default(),
+            current_skill: SkillSet::default(),
         }
     }
 }
@@ -210,7 +213,7 @@ impl Character {
         CharacterTraits::apply_traits(&self.traits)
     }
     pub fn experience_to_next_level(&self) -> u32 {
-        (self.level as f64 * (self.level as f64).ln()) as u32 + self.level * 100
+        ln_power_power_power_scale(self.level)
     }
     pub fn new(name: String, user_id: u64, class: Classes) -> Self {
         let max_hp = match class {
@@ -229,7 +232,7 @@ impl Character {
             attributes: (&class).into(),
             traits: HashSet::new(),
             available_traits: 0,
-            curent_skill: SkillSet::default(),
+            current_skill: SkillSet::default(),
         }
     }
 
@@ -258,7 +261,7 @@ impl Character {
     }
 
     pub async fn player_attack(&mut self, enemy: &mut Enemy) -> CarrionResult<BattleInfo> {
-        let mut damage = self.curent_skill.act(self, enemy);
+        let mut damage = self.current_skill.act(self, enemy);
         if enemy.defense.success() {
             let suppress = (enemy.defense.roll()).min(90);
             let suppress_quantity = damage as f64 * suppress as f64 / 100.0;
@@ -282,21 +285,21 @@ impl Character {
                     self.available_traits += 1;
                 }
             }
-            self.curent_skill.experience += enemy.experience as u64;
-            while self.curent_skill.experience
-                >= self.curent_skill.experience_to_next_level() as u64
+            self.current_skill.experience += enemy.experience as u64;
+            while self.current_skill.experience
+                >= self.current_skill.experience_to_next_level() as u64
             {
-                self.curent_skill.level += 1;
-                self.curent_skill.experience = self
-                    .curent_skill
+                self.current_skill.level += 1;
+                self.current_skill.experience = self
+                    .current_skill
                     .experience
-                    .checked_sub(self.curent_skill.experience_to_next_level())
+                    .checked_sub(self.current_skill.experience_to_next_level())
                     .unwrap_or(0);
             }
         }
 
         let binfo = BattleInfo {
-            action: self.curent_skill.skill.clone(),
+            action: self.current_skill.skill.clone(),
             damage: damage as i32,
             player_name: self.name.clone(),
             monster_name: enemy.kind.to_string(),

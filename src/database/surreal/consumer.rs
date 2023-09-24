@@ -34,6 +34,13 @@ impl SurrealConsumer {
         Ok(skill)
     }
 
+    pub async fn get_current_skill(user_id: u64) -> CarrionResult<Option<SkillSet>> {
+        let key = (format!("{}", user_id), 999);
+        let skill: Option<SkillSet> = DB.select(key).await?;
+        debug!("get_current_skill: {:?}", skill);
+        Ok(skill)
+    }
+
     pub async fn get_skill_id(user_id: u64, skill_id: u64) -> CarrionResult<Option<SkillSet>> {
         debug!("get_skill_id: {:?}, {:?}", user_id, skill_id);
         let key = (format!("{}", user_id), skill_id);

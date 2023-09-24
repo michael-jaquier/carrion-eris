@@ -1,6 +1,6 @@
 mod mob_actions;
 mod player_actions;
-
+use proc_macro_error::proc_macro_error;
 #[proc_macro_derive(AttributeScaling, attributes(stat))]
 pub fn eris_attributes(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);
@@ -29,6 +29,7 @@ pub fn eris_display_emoji(input: proc_macro::TokenStream) -> proc_macro::TokenSt
     toks.into()
 }
 
+#[proc_macro_error]
 #[proc_macro_derive(ErisMob, attributes(grade, alignment, vulnerability, actions))]
 pub fn eris_mob(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse_macro_input!(input as syn::DeriveInput);

@@ -3,11 +3,13 @@ use std::env;
 use carrion_eris::database::surreal::SurrealDB;
 use carrion_eris::{commands, State};
 
-use poise::{async_trait, serenity_prelude as serenity};
+use poise::{async_trait, insert_owners_from_http, serenity_prelude as serenity};
 
 use serenity::client::Context;
 use serenity::http::CacheHttp;
 
+use serenity::model::channel::GuildChannel;
+use serenity::model::gateway::Presence;
 use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
@@ -15,7 +17,7 @@ use serenity::model::id::{ChannelId, GuildId};
 
 use tokio::time::sleep;
 
-use tracing::debug;
+use tracing::{debug, info};
 use tracing_subscriber;
 
 use carrion_eris::battle::all_battle;
@@ -54,6 +56,15 @@ impl serenity::EventHandler for Handler {
                 };
             }
         });
+    }
+
+    async fn presence_update(&self, _ctx: Context, new_data: Presence) {
+        info!("Presence Update: {:?}", new_data);
+    }
+
+    async fn channel_create(&self, ctx: Context, channel: &GuildChannel) {
+        info!("channel_create");
+        info!("Channel: {:?}", channel);
     }
 }
 
@@ -108,7 +119,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ],
             ..Default::default()
         },
-        event_handler: |_ctx, event, _framework, _data| {
+        event_handler: |_ctx, event, _framework, data| {
             Box::pin(async move {
                 debug!("Got an event in event handler: {:?}", event.name());
                 Ok(())

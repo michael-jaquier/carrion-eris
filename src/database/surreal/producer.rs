@@ -50,8 +50,8 @@ impl SurrealProducer {
         Ok(record)
     }
 
-    pub async fn drop_character_skills(user_id: u64) -> CarrionResult<Option<Record>> {
-        let record = DB.delete(format!("{}", user_id)).await?;
+    pub async fn drop_character_skills(user_id: u64) -> CarrionResult<Vec<Record>> {
+        let record: Vec<Record> = DB.delete(format!("{}", user_id)).await?;
         debug!("Deleted Skills for: {:?}", record);
         Ok(record)
     }
@@ -79,6 +79,11 @@ impl SurrealProducer {
 
     pub async fn delete_enemy(character: &Character) -> CarrionResult<Option<Record>> {
         let record = DB.delete((ENEMY_TABLE, character.user_id)).await?;
+        debug!("Deleted Enemy for: {:?}", record);
+        Ok(record)
+    }
+    pub async fn delete_enemy_uid(character: u64) -> CarrionResult<Option<Record>> {
+        let record = DB.delete((ENEMY_TABLE, character)).await?;
         debug!("Deleted Enemy for: {:?}", record);
         Ok(record)
     }

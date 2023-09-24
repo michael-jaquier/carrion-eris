@@ -201,7 +201,7 @@ pub async fn all_battle() -> BattleResults {
                     .await
                     .expect("Failed to get skill");
 
-                character.curent_skill =
+                character.current_skill =
                     character_skill.unwrap_or(SkillSet::new(character.class.action()));
                 let result = battle(&mut character).await;
                 results.append_result(result);
@@ -210,13 +210,16 @@ pub async fn all_battle() -> BattleResults {
                     warn!("Character: {:?} has more hp than max_hp", character)
                 }
 
-                SurrealProducer::set_current_skill(character.curent_skill.clone(), &character)
+                SurrealProducer::set_current_skill(character.current_skill.clone(), &character)
                     .await
                     .expect("Failed to set current skill");
 
-                SurrealProducer::create_or_update_skill(character.curent_skill.clone(), &character)
-                    .await
-                    .expect("Failed to update skill");
+                SurrealProducer::create_or_update_skill(
+                    character.current_skill.clone(),
+                    &character,
+                )
+                .await
+                .expect("Failed to update skill");
 
                 SurrealProducer::create_or_update_character(character)
                     .await

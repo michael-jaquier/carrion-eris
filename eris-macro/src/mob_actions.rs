@@ -11,12 +11,11 @@ use syn::{
 
 use syn::{DeriveInput, Expr};
 
-
 struct MobAttributes {
-    grade: syn::Expr,
-    actions: syn::Expr,
-    alignment: syn::Expr,
-    vulnerability: syn::Expr,
+    grade: Option<syn::Expr>,
+    actions: Option<syn::Expr>,
+    alignment: Option<syn::Expr>,
+    vulnerability: Option<syn::Expr>,
 }
 
 impl Parse for MobAttributes {
@@ -26,39 +25,39 @@ impl Parse for MobAttributes {
 
         match input.parse::<Expr>() {
             Ok(expr) => {
-                if name_str == "grade" {
+                if name_str == "MobGrade" {
                     Ok(MobAttributes {
-                        grade: expr,
-                        actions: syn::parse_quote! { 0 },
-                        alignment: syn::parse_quote! { 0 },
-                        vulnerability: syn::parse_quote! { 0 },
+                        grade: Some(expr),
+                        actions: None,
+                        alignment: None,
+                        vulnerability: None,
                     })
-                } else if name_str == "actions" {
+                } else if name_str == "MobAction" {
                     Ok(MobAttributes {
-                        grade: syn::parse_quote! { 0 },
-                        actions: expr,
-                        alignment: syn::parse_quote! { 0 },
-                        vulnerability: syn::parse_quote! { 0 },
+                        grade: None,
+                        actions: Some(expr),
+                        alignment: None,
+                        vulnerability: None,
                     })
-                } else if name_str == "alignment" {
+                } else if name_str == "Alignment" {
                     Ok(MobAttributes {
-                        grade: syn::parse_quote! { 0 },
-                        actions: syn::parse_quote! { 0 },
-                        alignment: expr,
-                        vulnerability: syn::parse_quote! { 0 },
+                        grade: None,
+                        actions: None,
+                        alignment: Some(expr),
+                        vulnerability: None,
                     })
-                } else if name_str == "vulnerability" {
+                } else if name_str == "DamageType" {
                     Ok(MobAttributes {
-                        grade: syn::parse_quote! { 0 },
-                        actions: syn::parse_quote! { 0 },
-                        alignment: syn::parse_quote! { 0 },
-                        vulnerability: expr,
+                        grade: None,
+                        actions: None,
+                        alignment: None,
+                        vulnerability: Some(expr),
                     })
                 } else {
-                    abort!(name, "Invalid attribute");
+                    abort!(name, format!("Invalid attribute: {}", name_str));
                 }
             }
-            Err(_) => abort!(name, "Invalid attribute"),
+            Err(_) => abort!(name, "Idiot Macro Invalid attribute"),
         }
     }
 }
@@ -70,62 +69,63 @@ pub fn eris_mob(ast: &DeriveInput) -> TokenStream2 {
         _ => panic!("C can only be derived for enums"),
     };
 
-    let mob_attributes: Vec<MobAttributes> = variants
-        .iter()
-        .map(|variant| {
-            let mut grade = None;
-            let mut actions = None;
-            let mut alignment = None;
-            let mut vulnerability = None;
-            let attributes = &variant.attrs;
-            for attr in variant.attrs.iter() {
-                let sx = attr
-                    .parse_args_with(
-                        Punctuated::<MobAttributes, Token![,]>::parse_terminated)
-                    .unwrap();
-                for s in sx {
-                    grade = Some(s.grade);
-                    actions = Some(s.actions);
-                    alignment = Some(s.alignment);
-                    vulnerability = Some(s.vulnerability);
-                }
+    let mut grade_sets = Vec::new();
+    let mut alignment_sets = Vec::new();
+    let mut vulnerability_sets = Vec::new();
+    let mut actions_sets = Vec::new();
+    let mut choices = vec![quote! { let mut choices = vec![]; }];
+    for variant in variants {
+        let variant_name = &variant.ident;
+        for attr in variant.attrs.iter() {
+            if attr.path().is_ident("grade") {
+                let grade: Expr = attr.parse_args().unwrap();
+                choices
+                    .push(quote! { choices.extend(vec![#name::#variant_name; #grade as usize]); });
+                grade_sets.push(quote! { #name::#variant_name => #grade });
             }
-            MobAttributes {
-                grade: grade.unwrap(),
-                actions: actions.unwrap(),
-                alignment: alignment.unwrap(),
-                vulnerability: vulnerability.unwrap(),
+            if attr.path().is_ident("alignment") {
+                let alignment: Expr = attr.parse_args().unwrap();
+                alignment_sets.push(quote! { #name::#variant_name => #alignment });
             }
-        })
-        .collect();
-
-    let mob_string: String = mob_attributes.iter().map(|m| {
-        stringify!(m)
-    }).collect::<Vec<_>>().join("\n");
-
+            if attr.path().is_ident("vulnerability") {
+                let vulnerability: Expr = attr.parse_args().unwrap();
+                vulnerability_sets.push(quote! { #name::#variant_name => Some(#vulnerability) });
+            }
+            if attr.path().is_ident("actions") {
+                let actions: Expr = attr.parse_args().unwrap();
+                actions_sets.push(quote! { #name::#variant_name => #actions });
+            }
+        }
+    }
 
     let q = quote! {
-
+        impl rand::prelude::Distribution<Mob> for rand::distributions::Standard {
+            fn sample<R: rand::Rng + ?core::marker::Sized>(&self, rng: &mut R) -> crate::enemies::Mob {
+                #(#choices)*
+                let index = rng.gen_range(0..choices.len());
+                choices[index]
+            }
+        }
         use crate::EnemyEvents;
         impl crate::EnemyEvents for #name {
             fn grade(&self) -> crate::enemies::MobGrade {
-                use #name::*;
-                crate::enemies::MobGrade::Weak
+                match self {
+                    #(#grade_sets,)*
+                }
             }
             fn actions(&self) -> Vec<crate::enemies::MobAction> {
-                use #name::*;
-               vec!
+                match self {
+                    #(#actions_sets,)*
+                }
             }
             fn alignment(&self) -> crate::units::Alignment {
-                use #name::*;
                 match self {
-                    #(#alignment_sets => #alignment.into(),)*
+                    #(#alignment_sets,)*
                 }
             }
             fn vulnerability(&self) -> Option<crate::units::DamageType> {
-                use #name::*;
                 match self {
-                    #(#vulnerability_sets => Some(#vulnerability),)*
+                    #(#vulnerability_sets,)*
                     _ => None
                 }
             }

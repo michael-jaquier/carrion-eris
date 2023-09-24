@@ -144,6 +144,17 @@ pub fn log_power_scale(n: u32, power: Option<f64>) -> u32 {
     default_scale(n)
 }
 
+pub fn log_power_power_scale(n: u32) -> u32 {
+    let default_scale = |n: u32| ((n as f64).powf(n as f64).ln() * n as f64) as u32;
+    default_scale(n * n)
+}
+
+pub fn ln_power_power_power_scale(n: u32) -> u32 {
+    let n = n as f64;
+    let default_scale = |n: f64| 2.5_f64.powf(n + 3.0).ln() * (n + 10.0).powf(2.1);
+    default_scale(n) as u32
+}
+
 trait ValidEnum {
     fn valid() -> String;
 }

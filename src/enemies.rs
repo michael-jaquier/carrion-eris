@@ -10,6 +10,7 @@ use rand::prelude::{Distribution, SliceRandom};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
+use tracing::info;
 
 use crate::units::Alignment;
 
@@ -48,25 +49,18 @@ impl Enemy {
 
     fn linear_scaling(level: u32) -> u32 {
         let mut rng = rand::thread_rng();
-        let ranges = 1..(level * 10);
+        let ranges = 1..(level * 3);
         rng.gen_range(ranges)
     }
 
     fn super_logarithm_scaling(level: u32) -> u32 {
         let default_scale = |n: u32| ((n as f64).ln().powf(2.0)).floor() as u32 + level * 10;
-
         default_scale(level)
     }
 
-    fn hp_gain(&self, level: u32) -> u32 {
-        let constitution = self.attributes.constitution.inner();
-        let hp_gain = match self.kind {
-            Mob::Orc => (constitution * 20) + (level * 10),
-            Mob::Elf => (constitution * 10) + (level * 10),
-            Mob::KingSlime => (constitution * 200) + (level * 50),
-            _ => constitution * 10 + level * 10,
-        };
-        hp_gain
+    fn hp_gain(attributes: &Attributes, level: u32) -> u32 {
+        let constitution = attributes.constitution.inner();
+        constitution * 10 + level * 10
     }
 
     fn dice_scaling_log(level: u32) -> Dice {
@@ -77,15 +71,16 @@ impl Enemy {
     }
 
     pub fn weak(mob: Mob, level: u32) -> Enemy {
+        let attributes: Attributes = (&mob).into();
         Enemy {
             kind: mob.clone(),
             level,
             experience: Enemy::linear_scaling(level),
-            health: Enemy::super_logarithm_scaling(level) as i32,
+            health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 5].into()),
             resistance: Dice::new(vec![Die::D20.into(); 5].into()),
             gold: Enemy::super_logarithm_scaling(level),
-            attributes: (&mob).into(),
+            attributes,
             items: vec![],
             state: EnemyState::Alive,
             actions: mob.actions(),
@@ -93,15 +88,16 @@ impl Enemy {
     }
 
     pub fn normal(mob: Mob, level: u32) -> Enemy {
+        let attributes: Attributes = (&mob).into();
         Enemy {
             kind: mob.clone(),
             level,
             experience: Enemy::linear_scaling(level * 2),
-            health: Enemy::super_logarithm_scaling(level * 2) as i32,
+            health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 10].into()),
             resistance: Dice::new(vec![Die::D20.into(); 10].into()),
             gold: Enemy::super_logarithm_scaling(level * 2),
-            attributes: (&mob).into(),
+            attributes,
             items: vec![],
             state: EnemyState::Alive,
             actions: mob.actions(),
@@ -109,11 +105,12 @@ impl Enemy {
     }
 
     pub fn strong(mob: Mob, level: u32) -> Enemy {
+        let attributes: Attributes = (&mob).into();
         Enemy {
             kind: mob.clone(),
             level,
             experience: Enemy::linear_scaling(level * 5),
-            health: Enemy::super_logarithm_scaling(level * 5) as i32,
+            health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 15].into()),
             resistance: Dice::new(vec![Die::D20.into(); 15].into()),
             gold: Enemy::super_logarithm_scaling(level * 5),
@@ -125,17 +122,18 @@ impl Enemy {
     }
 
     pub fn boss(mob: Mob, level: u32) -> Enemy {
+        let attributes = <&Mob as Into<Attributes>>::into(&mob)
+            .log_scaling(level)
+            .clone();
         Enemy {
             kind: mob.clone(),
             level,
             experience: Enemy::linear_scaling(level * 10),
-            health: Enemy::super_logarithm_scaling(level * 50) as i32,
+            health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 20].into()),
             resistance: Dice::new(vec![Die::D20.into(); 15].into()),
             gold: Enemy::super_logarithm_scaling(level * 100),
-            attributes: <&Mob as Into<Attributes>>::into(&mob)
-                .log_scaling(level)
-                .clone(),
+            attributes,
             items: vec![],
             state: EnemyState::Alive,
             actions: mob.actions(),
@@ -188,10 +186,10 @@ impl Default for Enemy {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Copy, PartialEq)]
 pub enum MobGrade {
-    Weak,
-    Normal,
-    Strong,
-    Boss,
+    Weak = 10,
+    Normal = 5,
+    Strong = 3,
+    Boss = 1,
 }
 
 impl MobGrade {
@@ -220,32 +218,45 @@ impl rand::prelude::Distribution<MobGrade> for rand::distributions::Standard {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, ErisDisplayEmoji, ErisMob)]
 pub enum Mob {
-    #[emoji("👹")]
-    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
+    #[emoji("🧌")]
+    #[grade(MobGrade::Weak)]
+    #[actions(vec![MobAction::Bite, MobAction::Stab])]
+    #[alignment(Alignment::TrueNeutral)]
+    #[vulnerability(DamageType::Fire)]
     Orc,
     #[emoji("🧝")]
-    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
+    #[grade(MobGrade::Normal)]
+    #[actions(vec![MobAction::FireBall])]
+    #[alignment(Alignment::TrueNeutral)]
     Elf,
     #[emoji("🧟")]
-    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
+    #[grade(MobGrade::Strong)]
+    #[actions(vec![MobAction::Glare, MobAction::FireBall])]
+    #[alignment(Alignment::TrueNeutral)]
     Drow,
-    // Bosses
     #[emoji("👑")]
-    #[grade(MobGrade::Boss),actions(MobAction::SlimeAbsorb),alignment(Alignment::TrueNeutral)]
+    #[grade(MobGrade::Boss)]
+    #[actions(vec![MobAction::Crush, MobAction::SlimeAbsorb])]
+    #[alignment(Alignment::TrueNeutral)]
     KingSlime,
-}
-
-impl Distribution<Mob> for Standard {
-    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Mob {
-        let mob = rng.gen_range(1..=100);
-        match mob {
-            1..=50 => Mob::Orc,
-            51..=80 => Mob::Elf,
-            81..=95 => Mob::Drow,
-            96..=100 => Mob::KingSlime,
-            _ => Mob::Orc,
-        }
-    }
+    #[emoji("👹")]
+    #[grade(MobGrade::Weak)]
+    #[actions(vec![MobAction::Bite])]
+    #[alignment(Alignment::ChaoticEvil)]
+    #[vulnerability(DamageType::Fire)]
+    Goblin,
+    #[emoji("🤯")]
+    #[grade(MobGrade::Strong)]
+    #[actions(vec![MobAction::FireBall])]
+    #[alignment(Alignment::ChaoticNeutral)]
+    #[vulnerability(DamageType::Existential)]
+    NeuronThief,
+    #[emoji("💣")]
+    #[grade(MobGrade::Boss)]
+    #[actions(vec![MobAction::FireBall, MobAction::Explode])]
+    #[alignment(Alignment::ChaoticEvil)]
+    #[vulnerability(DamageType::Fire)]
+    Bomb,
 }
 
 impl Mob {

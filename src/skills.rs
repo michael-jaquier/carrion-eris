@@ -101,6 +101,7 @@ impl Skill {
                 }
                 DamageType::NonElemental => {}
                 DamageType::Physical => {}
+                _ => {}
             }
         }
     }
@@ -135,11 +136,23 @@ pub enum MobAction {
     #[stat("wisdom")]
     SlimeAbsorb,
     #[element("physical")]
+    #[stat("constitution")]
+    Crush,
+    #[element("physical")]
     #[stat("dexerity")]
     Riposte,
     #[element("dark")]
     #[stat("charisma")]
     Glare,
+    #[element("iron")]
+    #[stat("strength")]
+    MindBreak,
+    #[element("fire")]
+    #[stat("intelligence")]
+    Burn,
+    #[element("fire")]
+    #[stat("constitution")]
+    Explode,
 }
 
 impl MobAction {
@@ -191,10 +204,16 @@ impl MobAction {
                 DamageType::Arcane => {}
                 DamageType::Holy => {
                     base_die.set_critical_state(AdvantageState::Advantage);
-                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 2]));
+                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 3]));
                 }
                 DamageType::NonElemental => {}
                 DamageType::Physical => {}
+                DamageType::Hope => {}
+                DamageType::Despair => {}
+                DamageType::Existential => {
+                    base_die.magical = Some(Dice::new(vec![Die::D4.into(); 20]));
+                }
+                _ => {}
             }
         }
     }

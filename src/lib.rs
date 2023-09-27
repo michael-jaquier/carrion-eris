@@ -24,6 +24,9 @@ use thiserror::Error;
 
 use skills::Skill;
 
+use crate::enemies::Enemy;
+use crate::player::{Character, SkillSet};
+use crate::skills::MobAction;
 use std::fmt::{Display, Formatter};
 
 #[derive(Error, Debug)]
@@ -47,7 +50,9 @@ pub struct Record {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BattleInfo {
     pub action: Skill,
-    pub damage: i32,
+    pub enemy_action: String,
+    pub damage_dealt: i32,
+    pub damage_taken: i32,
     pub player_name: String,
     pub monster_name: String,
     pub kill: bool,
@@ -58,34 +63,27 @@ pub struct BattleInfo {
     pub next_level: u32,
     pub experience_gained: u32,
     pub skill_experience_gained: u32,
+    pub gold_gained: u64,
 }
 
 impl BattleInfo {
-    pub fn new(
-        action: Skill,
-        damage: i32,
-        player_name: String,
-        monster_name: String,
-        kill: bool,
-        critical: bool,
-        leveled_up: bool,
-        monster_hp: i32,
-        traits_available: u32,
-        next_level: u32,
-    ) -> Self {
+    pub fn begin(character: &Character, enemy: &Enemy) -> Self {
         Self {
-            action,
-            damage,
-            player_name,
-            monster_name,
-            kill,
-            critical,
-            leveled_up,
-            monster_hp,
-            traits_available,
-            next_level,
+            action: character.current_skill.skill(),
+            enemy_action: "".to_string(),
+            damage_dealt: 0,
+            damage_taken: 0,
+            player_name: character.name.clone(),
+            monster_name: enemy.kind.to_string(),
+            kill: false,
+            critical: false,
+            leveled_up: false,
+            monster_hp: enemy.health,
+            traits_available: character.available_traits,
+            next_level: character.experience_to_next_level(),
             experience_gained: 0,
             skill_experience_gained: 0,
+            gold_gained: 0,
         }
     }
 }
@@ -102,17 +100,35 @@ impl Display for BattleInfo {
         string.push_str(" with ");
         string.push_str(&self.action.to_string());
         string.push_str(" dealing ");
-        string.push_str(&self.damage.to_string());
+        string.push_str(&self.damage_dealt.to_string());
         string.push_str(" damage!");
         string.push_str("\t🎲");
+
+        if self.damage_taken > 0 {
+            string.push_str("\n\t");
+            string.push_str("🎲\t");
+            string.push_str(&self.monster_name);
+            string.push_str(" attacked ");
+            string.push_str(&self.player_name);
+            string.push_str(" with ");
+            string.push_str(&self.enemy_action.to_string());
+            string.push_str(" dealing ");
+            string.push_str(&self.damage_taken.to_string());
+            string.push_str(" damage!");
+            string.push_str("\t🎲");
+        }
+
         if self.critical {
             string.push_str(" 💥 Critical hit! 💥");
         }
-        if self.kill {
+        if self.gold_gained > 0 {
             string.push_str("\n\t");
-            string.push_str("☠️\t");
-            string.push_str("Killing blow");
-            string.push_str("\t☠️");
+            string.push_str("💰\t");
+            string.push_str(&self.player_name);
+            string.push_str(" gained ");
+            string.push_str(&self.gold_gained.to_string());
+            string.push_str(" gold!");
+            string.push_str("\t💰");
         }
         if self.leveled_up {
             string.push_str("\n\t");
@@ -122,9 +138,9 @@ impl Display for BattleInfo {
         }
         if self.traits_available > 0 {
             string.push_str("\n\t");
-            string.push_str("🎉\t");
+            string.push_str("⭐\t");
             string.push_str("Trait available!");
-            string.push_str("\t🎉")
+            string.push_str("\t⭐")
         }
         string.push_str("\n🗡️\n");
         write!(f, "{}", string)
@@ -140,7 +156,7 @@ trait ElementalScaling {
 }
 
 pub fn log_power_scale(n: u32, power: Option<f64>) -> u32 {
-    let default_scale = |n: u32| ((n as f64).ln().powf(power.unwrap_or(1.1))).floor() as u32;
+    let default_scale = |n: u32| ((n as f64).ln().powf(power.unwrap_or(1.1))) as u32;
     default_scale(n)
 }
 

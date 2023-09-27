@@ -15,6 +15,8 @@ static DB: Lazy<Surreal<Any>> = Lazy::new(Surreal::init);
 pub static CHARACTER_TABLE: &str = "characters";
 pub static ENEMY_TABLE: &str = "enemies";
 
+pub static ITEM_TABLE: &str = "items";
+
 pub static SKILL_TABLE: &str = "skills";
 pub struct SurrealDB {}
 impl SurrealDB {
@@ -29,5 +31,12 @@ impl SurrealDB {
     pub async fn authenticate(username: &str, password: &str) -> CarrionResult<()> {
         DB.signin(Root { username, password }).await?;
         Ok(())
+    }
+
+    pub async fn export(file: &str) {
+        DB.export(file).await.unwrap();
+    }
+    pub async fn import(file: &str) {
+        DB.import(file).await.unwrap();
     }
 }

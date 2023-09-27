@@ -125,33 +125,43 @@ pub enum MobAction {
     Bite,
     #[element("physical")]
     #[stat("strength")]
+    #[emoji("👊")]
     Claw,
     #[element("physical")]
     #[stat("strength")]
+    #[emoji("🔪")]
     Stab,
     #[element("fire")]
     #[stat("intelligence")]
+    #[emoji("🔥")]
     FireBall,
     #[element("holy")]
     #[stat("wisdom")]
+    #[emoji("🌟")]
     SlimeAbsorb,
     #[element("physical")]
     #[stat("constitution")]
+    #[emoji("👊")]
     Crush,
     #[element("physical")]
-    #[stat("dexerity")]
+    #[stat("dexterity")]
+    #[emoji("🗡️")]
     Riposte,
     #[element("dark")]
     #[stat("charisma")]
+    #[emoji("👁️")]
     Glare,
-    #[element("iron")]
-    #[stat("strength")]
+    #[element("existential")]
+    #[stat("charisma")]
+    #[emoji("🔊")]
     MindBreak,
     #[element("fire")]
     #[stat("intelligence")]
+    #[emoji("📛")]
     Burn,
-    #[element("fire")]
+    #[element("boss")]
     #[stat("constitution")]
+    #[emoji("💥")]
     Explode,
 }
 
@@ -212,6 +222,11 @@ impl MobAction {
                 DamageType::Despair => {}
                 DamageType::Existential => {
                     base_die.magical = Some(Dice::new(vec![Die::D4.into(); 20]));
+                }
+                DamageType::Boss => {
+                    base_die.set_critical_state(AdvantageState::Advantage);
+                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 5]));
+                    base_die.physical = Some(Dice::new(vec![Die::D20.into(); 5]));
                 }
                 _ => {}
             }

@@ -192,11 +192,14 @@ impl AttackModifiers {
 
     fn physical_range(&self) -> u32 {
         if let Some(physical) = &self.physical() {
-            let dmg = self.apply_traits(
+            let mut dmg = self.apply_traits(
                 &self.enemy,
                 &physical,
                 &self.player.mutations().get_physical_attack(),
             );
+            if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
+                dmg + (dmg * dice.roll() as f64 / 5.0);
+            }
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
@@ -204,11 +207,14 @@ impl AttackModifiers {
 
     fn magical_range(&self) -> u32 {
         if let Some(magical) = &self.magical() {
-            let dmg = self.apply_traits(
+            let mut dmg = self.apply_traits(
                 &self.enemy,
                 &magical,
                 &self.player.mutations().get_physical_attack(),
             );
+            if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
+                dmg + (dmg * dice.roll() as f64 / 5.0);
+            }
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0

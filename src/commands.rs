@@ -1,11 +1,13 @@
 use crate::classes::Classes;
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
+use crate::enemies::{Mob, MobGrade};
+use crate::items::Items;
 use crate::player::Character;
 use crate::skills::Skill;
 use crate::traits::CharacterTraits;
-use crate::ValidEnum;
 use crate::{Context, Error};
+use crate::{EnemyEvents, ValidEnum};
 use tracing::field::debug;
 use tracing::{debug, info, warn};
 
@@ -276,5 +278,65 @@ pub async fn skill(
             ctx.send(|b| b.content(responses).ephemeral(true)).await?;
         }
     }
+    Ok(())
+}
+
+/// Battle an enemy
+#[poise::command(prefix_command, slash_command)]
+pub async fn battle(
+    ctx: Context<'_>,
+    #[autocomplete = "poise::builtins::autocomplete_command"]
+    #[description = "Create a character form the list of valid classes"]
+    command: Option<String>,
+) -> Result<(), Error> {
+    let user_id = ctx.author().id.0;
+    match command {
+        None => {
+            let valid_enemys = Mob::valid();
+            ctx.send(|b| b.content(valid_enemys).ephemeral(true))
+                .await?;
+        }
+        Some(command) => {
+            let enemy = Mob::try_from(command);
+            match enemy {
+                Ok(mob) => {
+                    let gold = SurrealConsumer::get_items(user_id).await?;
+                    match gold {
+                        None => {
+                            ctx.send(|b| {
+                                b.content("You have no gold to spend on a battle")
+                                    .ephemeral(true)
+                            })
+                            .await?;
+                        }
+                        Some(gold) => {
+                            let base_cost = 200;
+                            let gold = gold.gold;
+                            let cost = base_cost * mob.grade() as u64;
+                            if gold < cost {
+                                ctx.send(|b| {
+                                    b.content(format!("You need {} gold to battle a {}", cost, mob))
+                                        .ephemeral(true)
+                                })
+                                .await?;
+                                return Ok(());
+                            }
+                            let character = SurrealConsumer::get_character(user_id)
+                                .await?
+                                .expect("Failed to get character");
+                        }
+                    }
+                }
+                Err(huh) => {
+                    ctx.send(|b| {
+                        b.content(format!("Invalid enemy: {:}", huh))
+                            .ephemeral(true)
+                    })
+                    .await?;
+                }
+            }
+        }
+    }
+
     Ok(())
 }

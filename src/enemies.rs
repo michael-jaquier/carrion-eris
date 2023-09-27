@@ -4,7 +4,7 @@ use crate::player::{ActionDice, Character};
 use crate::skills::MobAction;
 use crate::units::Attributes;
 use crate::units::{AttackType, DamageType};
-use eris_macro::{ErisDisplayEmoji, ErisMob};
+use eris_macro::{ErisDisplayEmoji, ErisMob, ErisValidEnum};
 use rand::distributions::Standard;
 use rand::prelude::{Distribution, SliceRandom};
 use rand::{thread_rng, Rng};
@@ -28,7 +28,7 @@ pub struct Enemy {
     pub(crate) health: i32,
     pub(crate) defense: Dice,
     pub(crate) resistance: Dice,
-    pub(crate) gold: u32,
+    pub(crate) gold: u64,
     pub(crate) attributes: Attributes,
     pub(crate) items: Vec<Item>,
     pub(crate) state: EnemyState,
@@ -79,7 +79,7 @@ impl Enemy {
             health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 5].into()),
             resistance: Dice::new(vec![Die::D20.into(); 5].into()),
-            gold: Enemy::super_logarithm_scaling(level),
+            gold: Enemy::super_logarithm_scaling(level) as u64,
             attributes,
             items: vec![],
             state: EnemyState::Alive,
@@ -96,7 +96,7 @@ impl Enemy {
             health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 10].into()),
             resistance: Dice::new(vec![Die::D20.into(); 10].into()),
-            gold: Enemy::super_logarithm_scaling(level * 2),
+            gold: Enemy::super_logarithm_scaling(level * 2) as u64,
             attributes,
             items: vec![],
             state: EnemyState::Alive,
@@ -113,7 +113,7 @@ impl Enemy {
             health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 15].into()),
             resistance: Dice::new(vec![Die::D20.into(); 15].into()),
-            gold: Enemy::super_logarithm_scaling(level * 5),
+            gold: Enemy::super_logarithm_scaling(level * 5) as u64,
             attributes: (&mob).into(),
             items: vec![],
             state: EnemyState::Alive,
@@ -132,7 +132,7 @@ impl Enemy {
             health: Enemy::hp_gain(&attributes, level) as i32,
             defense: Dice::new(vec![Die::D20.into(); 20].into()),
             resistance: Dice::new(vec![Die::D20.into(); 15].into()),
-            gold: Enemy::super_logarithm_scaling(level * 100),
+            gold: Enemy::super_logarithm_scaling(level * 100) as u64,
             attributes,
             items: vec![],
             state: EnemyState::Alive,
@@ -147,12 +147,10 @@ impl Enemy {
         }
     }
 
-    pub fn action(&self) -> ActionDice {
+    pub fn action(&self) -> (ActionDice, MobAction) {
         let mut rng = thread_rng();
-        self.actions
-            .choose(&mut rng)
-            .expect("No Skill found")
-            .act(&self)
+        let action = self.actions.choose(&mut rng).expect("No Skill found");
+        (action.act(&self), action.clone())
     }
 
     pub fn set_actions(mut self, actions: Vec<MobAction>) -> Enemy {
@@ -216,7 +214,9 @@ impl rand::prelude::Distribution<MobGrade> for rand::distributions::Standard {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, ErisDisplayEmoji, ErisMob)]
+#[derive(
+    Debug, Clone, PartialEq, Serialize, Deserialize, Copy, ErisDisplayEmoji, ErisMob, ErisValidEnum,
+)]
 pub enum Mob {
     #[emoji("🧌")]
     #[grade(MobGrade::Weak)]
@@ -247,15 +247,14 @@ pub enum Mob {
     Goblin,
     #[emoji("🤯")]
     #[grade(MobGrade::Strong)]
-    #[actions(vec![MobAction::FireBall])]
+    #[actions(vec![MobAction::MindBreak, MobAction::Glare])]
     #[alignment(Alignment::ChaoticNeutral)]
     #[vulnerability(DamageType::Existential)]
     NeuronThief,
     #[emoji("💣")]
     #[grade(MobGrade::Boss)]
-    #[actions(vec![MobAction::FireBall, MobAction::Explode])]
+    #[actions(vec![MobAction::Explode])]
     #[alignment(Alignment::ChaoticEvil)]
-    #[vulnerability(DamageType::Fire)]
     Bomb,
 }
 
@@ -280,5 +279,18 @@ mod test {
         assert_eq!(t, MobGrade::Normal);
         let t = mob.actions();
         assert_eq!(t, vec![MobAction::FireBall]);
+    }
+
+    #[test]
+    fn bomb_is_a_bomb() {
+        let bomb = Mob::Bomb;
+        let t = bomb.alignment();
+        assert_eq!(t, Alignment::ChaoticEvil);
+        let t = bomb.grade();
+        assert_eq!(t, MobGrade::Boss);
+        let t = bomb.actions();
+        assert_eq!(t, vec![MobAction::Explode]);
+        let bomb_string = bomb.actions().first().unwrap().to_string();
+        assert_eq!(bomb_string, "💥 Explode 💥");
     }
 }

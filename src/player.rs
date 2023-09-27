@@ -17,6 +17,7 @@ use rand::{thread_rng, Rng};
 use std::fmt::Display;
 
 use crate::dice::{AdvantageState, Dice, Die, DieObject};
+use crate::items::Equipment;
 use crate::skills::Skill;
 use tracing::log::debug;
 use tracing::warn;
@@ -188,6 +189,7 @@ pub struct Character {
     pub(crate) traits: HashSet<CharacterTraits>,
     pub(crate) available_traits: u32,
     pub(crate) current_skill: SkillSet,
+    pub(crate) equipment: Equipment,
 }
 
 impl Default for Character {
@@ -204,6 +206,7 @@ impl Default for Character {
             traits: HashSet::new(),
             available_traits: 0,
             current_skill: SkillSet::default(),
+            equipment: Default::default(),
         }
     }
 }
@@ -233,6 +236,7 @@ impl Character {
             traits: HashSet::new(),
             available_traits: 0,
             current_skill: SkillSet::default(),
+            equipment: Default::default(),
         }
     }
 
@@ -260,7 +264,7 @@ impl Character {
         self.hp = self.max_hp as i32;
     }
 
-    pub async fn player_attack(&mut self, enemy: &mut Enemy) -> CarrionResult<BattleInfo> {
+    pub fn player_attack(&mut self, enemy: &mut Enemy, battle_info: &mut BattleInfo) {
         let mut damage = self.current_skill.act(self, enemy);
         if enemy.defense.success() {
             let suppress = (enemy.defense.roll()).min(90);
@@ -269,6 +273,8 @@ impl Character {
         }
 
         enemy.health -= damage as i32;
+        battle_info.damage_dealt += damage as i32;
+        battle_info.monster_hp += enemy.health;
         debug!(
             "{} attacked {} for {} damage! {} has {} hp",
             self.name, enemy.kind, damage, enemy.kind, enemy.health
@@ -276,16 +282,21 @@ impl Character {
 
         let mut level = false;
         if enemy.health <= 0 {
+            battle_info.kill = true;
+            battle_info.gold_gained += enemy.gold;
             enemy.state = EnemyState::Dead;
             self.experience += enemy.experience;
             while self.experience >= self.experience_to_next_level() {
                 self.level_up();
                 level = true;
+                battle_info.leveled_up = true;
                 if self.level % 10 == 0 {
                     self.available_traits += 1;
+                    battle_info.traits_available += 1;
                 }
             }
             self.current_skill.experience += enemy.experience as u64;
+            battle_info.skill_experience_gained += enemy.experience;
             while self.current_skill.experience
                 >= self.current_skill.experience_to_next_level() as u64
             {
@@ -297,29 +308,10 @@ impl Character {
                     .unwrap_or(0);
             }
         }
-
-        let binfo = BattleInfo {
-            action: self.current_skill.skill.clone(),
-            damage: damage as i32,
-            player_name: self.name.clone(),
-            monster_name: enemy.kind.to_string(),
-            kill: enemy.health <= 0,
-            critical: false,
-            leveled_up: level,
-            monster_hp: enemy.health,
-            traits_available: self.available_traits,
-            next_level: self
-                .experience_to_next_level()
-                .checked_sub(self.experience)
-                .unwrap_or(0),
-            experience_gained: enemy.experience,
-            skill_experience_gained: enemy.experience,
-        };
-        Ok(binfo)
     }
 
-    pub fn enemy_attack(&mut self, enemy: &Enemy) {
-        let action = enemy.action();
+    pub fn enemy_attack(&mut self, enemy: &Enemy, battle_info: &mut BattleInfo) {
+        let (action, mob_action) = enemy.action();
         let defense: DefenseModifiers = self.into();
         if defense.dodge() {
             return;
@@ -331,6 +323,7 @@ impl Character {
             if mitigated_damage < 0 {
                 warn!("{} has negative Physical damage!", self.name);
             }
+            battle_info.damage_taken += mitigated_damage as i32;
             self.hp -= mitigated_damage as i32;
         }
         if action.magical().is_some() {
@@ -339,6 +332,7 @@ impl Character {
             if mitigated_damage < 0 {
                 warn!("{} has negative Magical damage!", self.name);
             }
+            battle_info.damage_taken += mitigated_damage as i32;
             self.hp -= mitigated_damage as i32;
         }
 
@@ -347,6 +341,8 @@ impl Character {
             self.hp = self.max_hp as i32;
         }
         self.hp = self.hp.max(0);
+        battle_info.enemy_action = mob_action.to_string();
+        battle_info.monster_name = enemy.kind.to_string();
     }
 }
 

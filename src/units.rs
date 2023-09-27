@@ -276,6 +276,7 @@ pub enum DamageType {
     Hope,
     Despair,
     Existential,
+    Boss,
 }
 
 impl From<&str> for DamageType {
@@ -295,6 +296,7 @@ impl From<&str> for DamageType {
             "hope" => DamageType::Hope,
             "despair" => DamageType::Despair,
             "existential" => DamageType::Existential,
+            "boss" => DamageType::Boss,
             _ => panic!("Invalid damage type"),
         }
     }

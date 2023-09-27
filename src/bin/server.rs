@@ -35,6 +35,7 @@ impl serenity::EventHandler for Handler {
         let ctx_clone = ctx.clone();
         tokio::spawn(async move {
             loop {
+                SurrealDB::export("eris.db").await;
                 sleep(Duration::from_secs(10)).await;
                 let results = all_battle().await;
                 let channel_id = 1152198475925176401;

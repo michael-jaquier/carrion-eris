@@ -1,15 +1,12 @@
 use crate::enemies::{Enemy, EnemyState};
-use crate::{
-    ln_power_power_power_scale, log_power_power_scale, log_power_scale, AttributeScaling,
-    BattleInfo, CarrionResult, ElementalScaling,
-};
+use crate::{ln_power_power_power_scale, log_power_scale, BattleInfo};
 
 use serde::{Deserialize, Serialize};
 
 use crate::classes::Classes;
 use crate::mutators::{AttackModifiers, DefenseModifiers};
 use crate::traits::{CharacterTraits, TraitMutations};
-use crate::units::{AttackType, Attributes};
+use crate::units::Attributes;
 use std::collections::HashSet;
 
 use rand::{thread_rng, Rng};
@@ -280,7 +277,6 @@ impl Character {
             self.name, enemy.kind, damage, enemy.kind, enemy.health
         );
 
-        let mut level = false;
         if enemy.health <= 0 {
             battle_info.kill = true;
             battle_info.gold_gained += enemy.gold;
@@ -288,7 +284,6 @@ impl Character {
             self.experience += enemy.experience;
             while self.experience >= self.experience_to_next_level() {
                 self.level_up();
-                level = true;
                 battle_info.leveled_up = true;
                 if self.level % 10 == 0 {
                     self.available_traits += 1;
@@ -320,18 +315,14 @@ impl Character {
         if action.physical().is_some() {
             let damage = action.physical().unwrap().roll();
             let mitigated_damage = damage - (damage as f64 * defense.physical_mitigation()) as u32;
-            if mitigated_damage < 0 {
-                warn!("{} has negative Physical damage!", self.name);
-            }
+
             battle_info.damage_taken += mitigated_damage as i32;
             self.hp -= mitigated_damage as i32;
         }
         if action.magical().is_some() {
             let damage = action.magical().unwrap().roll();
             let mitigated_damage = damage - (damage as f64 * defense.magical_suppress()) as u32;
-            if mitigated_damage < 0 {
-                warn!("{} has negative Magical damage!", self.name);
-            }
+
             battle_info.damage_taken += mitigated_damage as i32;
             self.hp -= mitigated_damage as i32;
         }
@@ -391,7 +382,6 @@ mod test {
 
     #[test]
     fn player_action_attributes() {
-        use crate::classes::Classes;
         use crate::skills::Skill;
         let action = Skill::MagicMissile;
         let element = ElementalScaling::scaling(&action);

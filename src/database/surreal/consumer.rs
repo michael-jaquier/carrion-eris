@@ -6,7 +6,6 @@ use crate::{CarrionResult, Record};
 use surrealdb::sql::Thing;
 use surrealdb::Response;
 use tracing::debug;
-use tracing_subscriber::fmt::format;
 
 pub struct SurrealConsumer {}
 

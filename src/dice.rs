@@ -263,7 +263,6 @@ impl Default for Dice {
 #[cfg(test)]
 mod tests {
 
-    use crate::dice::AdvantageState::Advantage;
     use crate::dice::{AdvantageState, Dice, Die};
 
     #[test]

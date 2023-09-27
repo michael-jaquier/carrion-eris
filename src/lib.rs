@@ -25,8 +25,8 @@ use thiserror::Error;
 use skills::Skill;
 
 use crate::enemies::Enemy;
-use crate::player::{Character, SkillSet};
-use crate::skills::MobAction;
+use crate::player::Character;
+
 use std::fmt::{Display, Formatter};
 
 #[derive(Error, Debug)]

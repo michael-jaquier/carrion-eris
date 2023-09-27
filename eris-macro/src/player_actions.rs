@@ -90,7 +90,7 @@ pub fn eris_emoji(ast: &DeriveInput) -> TokenStream2 {
     for variant in variants {
         for attr in variant.attrs.iter() {
             if attr.path().is_ident("emoji") {
-                let mut stat_value: Expr = attr.parse_args().unwrap();
+                let  stat_value: Expr = attr.parse_args().unwrap();
                 let f = match stat_value {
                     Expr::Lit(lit) => {
                         let lit = lit.lit;
@@ -120,11 +120,11 @@ pub fn eris_emoji(ast: &DeriveInput) -> TokenStream2 {
 
     let key_vector = enum_string
         .iter()
-        .map(|(k, v)| k.clone())
+        .map(|(k, _)| k.clone())
         .collect::<Vec<_>>();
     let value_vector = enum_string
         .iter()
-        .map(|(k, v)| v.clone())
+        .map(|(_, v)| v.clone())
         .collect::<Vec<_>>();
 
     let mut q = quote! {
@@ -157,7 +157,7 @@ pub fn eris_valid_enum(ast: &DeriveInput) -> TokenStream2 {
         ee.push(variant.ident.clone());
     }
 
-    let mut q = quote! {
+    let q = quote! {
         impl crate::ValidEnum for #name {
             fn valid() -> String {
                 use #name::*;

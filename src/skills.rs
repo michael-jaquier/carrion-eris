@@ -1,7 +1,7 @@
 use crate::dice::{AdvantageState, Dice, Die};
 use crate::enemies::Enemy;
 use crate::player::ActionDice;
-use crate::units::{AttackType, Attribute, Attributes, DamageType};
+use crate::units::{Attribute, Attributes, DamageType};
 use crate::{log_power_scale, AttributeScaling, ElementalScaling};
 use eris_macro::{AttributeScaling, ElementalScaling, ErisDisplayEmoji, ErisValidEnum};
 use serde::{Deserialize, Serialize};
@@ -228,7 +228,7 @@ impl MobAction {
                     base_die.magical = Some(Dice::new(vec![Die::D20.into(); 5]));
                     base_die.physical = Some(Dice::new(vec![Die::D20.into(); 5]));
                 }
-                _ => {}
+
             }
         }
     }

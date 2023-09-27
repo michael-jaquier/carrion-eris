@@ -23,6 +23,12 @@ DEFINE TABLE characters SCHEMALESS PERMISSIONS NONE;
 DEFINE TABLE enemies SCHEMALESS PERMISSIONS NONE;
 
 -- ------------------------------
+-- TABLE: fighting
+-- ------------------------------
+
+DEFINE TABLE fighting SCHEMALESS PERMISSIONS NONE;
+
+-- ------------------------------
 -- TABLE: items
 -- ------------------------------
 
@@ -38,26 +44,34 @@ BEGIN TRANSACTION;
 -- TABLE DATA: `442792120336777217`
 -- ------------------------------
 
-UPDATE ⟨442792120336777217⟩:1 CONTENT { active: true, experience: 1611, id: ⟨442792120336777217⟩:1, level: 5, skill: 'MagicMissile' };
-UPDATE ⟨442792120336777217⟩:999 CONTENT { active: true, experience: 1611, id: ⟨442792120336777217⟩:999, level: 5, skill: 'MagicMissile' };
+UPDATE ⟨442792120336777217⟩:0 CONTENT { active: true, experience: 63, id: ⟨442792120336777217⟩:0, level: 1, skill: 'Slash' };
+UPDATE ⟨442792120336777217⟩:4 CONTENT { active: true, experience: 158, id: ⟨442792120336777217⟩:4, level: 1, skill: 'EarthShatter' };
+UPDATE ⟨442792120336777217⟩:999 CONTENT { active: true, experience: 158, id: ⟨442792120336777217⟩:999, level: 1, skill: 'EarthShatter' };
 
 -- ------------------------------
 -- TABLE DATA: characters
 -- ------------------------------
 
-UPDATE characters:442792120336777217 CONTENT { attributes: { charisma: { Charisma: 7 }, constitution: { Constitution: 7 }, dexterity: { Dexterity: 7 }, intelligence: { Intelligence: 17 }, strength: { Strength: 7 }, wisdom: { Wisdom: 7 } }, available_traits: 0, class: 'Wizard', current_skill: { active: true, experience: 1611, level: 5, skill: 'MagicMissile' }, equipment: { amulet: NONE, chest: NONE, consumable: NONE, feet: NONE, hands: NONE, head: NONE, legs: NONE, misc: NONE, ring: NONE, shield: NONE, weapon: NONE }, experience: 1611, hp: 114, id: characters:442792120336777217, level: 5, max_hp: 114, name: 'milk_dog', traits: [], user_id: 442792120336777217 };
+UPDATE characters:442792120336777217 CONTENT { attributes: { charisma: { Charisma: 7 }, constitution: { Constitution: 15 }, dexterity: { Dexterity: 7 }, intelligence: { Intelligence: 7 }, strength: { Strength: 17 }, wisdom: { Wisdom: 7 } }, available_traits: 0, class: 'Warrior', current_skill: { active: true, experience: 158, level: 1, skill: 'EarthShatter' }, equipment: { amulet: NONE, chest: NONE, consumable: NONE, feet: NONE, hands: NONE, head: NONE, legs: NONE, misc: NONE, ring: NONE, shield: NONE, weapon: NONE }, experience: 221, hp: 20, id: characters:442792120336777217, level: 1, max_hp: 20, name: 'milk_dog', traits: [], user_id: 442792120336777217 };
 
 -- ------------------------------
 -- TABLE DATA: enemies
 -- ------------------------------
 
-CREATE enemies CONTENT { actions: ['Bite', 'Stab'], attributes: { charisma: { Charisma: 7 }, constitution: { Constitution: 7 }, dexterity: { Dexterity: 7 }, intelligence: { Intelligence: 1 }, strength: { Strength: 17 }, wisdom: { Wisdom: 7 } }, defense: { dice: [{ advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }] }, experience: 9, gold: 84, health: 45, items: [], kind: 'Orc', level: 8, resistance: { dice: [{ advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }] }, state: 'Alive' };
+UPDATE enemies:a7npy8sq9ee5y9pwa9u6 CONTENT { actions: ['Bite'], attributes: { charisma: { Charisma: 20 }, constitution: { Constitution: 15 }, dexterity: { Dexterity: 22 }, intelligence: { Intelligence: 7 }, strength: { Strength: 7 }, wisdom: { Wisdom: 7 } }, defense: { dice: [{ advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }] }, experience: 2, gold: 10, health: 13, id: enemies:a7npy8sq9ee5y9pwa9u6, items: [], kind: 'Goblin', level: 1, resistance: { dice: [{ advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }, { advantage: 'None', critical: 20, critical_die: 'D20', critical_multiplier: 1.3f, die: 'D20', success: 20 }] }, state: 'Alive' };
+
+-- ------------------------------
+-- TABLE DATA: fighting
+-- ------------------------------
+
+RELATE characters:442792120336777217 -> fighting:buarmg1dzsqnk2xr6dez -> enemies:a7npy8sq9ee5y9pwa9u6 CONTENT { __: true, id: fighting:buarmg1dzsqnk2xr6dez, in: characters:442792120336777217, out: enemies:a7npy8sq9ee5y9pwa9u6 };
+RELATE characters:442792120336777217 -> fighting:hacusnb6pjwg2zih4ipl -> enemies:a7npy8sq9ee5y9pwa9u6 CONTENT { __: true, id: fighting:hacusnb6pjwg2zih4ipl, in: characters:442792120336777217, out: enemies:a7npy8sq9ee5y9pwa9u6 };
 
 -- ------------------------------
 -- TABLE DATA: items
 -- ------------------------------
 
-UPDATE items:442792120336777217 CONTENT { gold: 107591, id: items:442792120336777217, items: [] };
+UPDATE items:442792120336777217 CONTENT { gold: 8817, id: items:442792120336777217, items: [] };
 
 -- ------------------------------
 -- TRANSACTION

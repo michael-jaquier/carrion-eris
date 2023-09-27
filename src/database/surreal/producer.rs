@@ -3,21 +3,23 @@ use crate::enemies::Enemy;
 use crate::player::{Character, SkillSet};
 use crate::{CarrionResult, Record};
 use surrealdb::opt::PatchOp;
-use surrealdb::sql::{Datetime, Thing};
+use surrealdb::sql::Thing;
 use surrealdb::Response;
 
 use crate::database::surreal::consumer::SurrealConsumer;
-use tracing::{debug, info};
+use tracing::debug;
 
 pub struct SurrealProducer {}
 
 impl SurrealProducer {
     pub async fn create_character(content: Character) -> CarrionResult<Option<Record>> {
         debug!("Producer: {:?}", content);
-        let record = DB
+        let record: Option<Record> = DB
             .create((CHARACTER_TABLE, content.user_id))
             .content(content)
             .await?;
+        let record_id = record.clone().expect("Expected record").id;
+        _ = SurrealProducer::create_user_items(record_id).await;
         Ok(record)
     }
 
@@ -102,8 +104,20 @@ impl SurrealProducer {
         Ok(record)
     }
 
-    pub async fn patch_user_gold(content: u64, user_id: u64) -> CarrionResult<Option<Record>> {
+    pub async fn create_user_items(user_id: Thing) -> CarrionResult<Option<Record>> {
+        let items = crate::items::Items::default();
+        Ok(DB.update((ITEM_TABLE, user_id.id)).content(items).await?)
+    }
+
+    pub async fn patch_user_gold(
+        content: u64,
+        user_id: u64,
+        negative: bool,
+    ) -> CarrionResult<Option<Record>> {
         debug!("Patching Gold: {:?}", content);
+        if content == 0 {
+            return Ok(None);
+        }
         let old_gold = match SurrealConsumer::get_items(user_id).await? {
             Some(items) => items.gold,
             None => {
@@ -112,7 +126,12 @@ impl SurrealProducer {
                 0
             }
         };
-        let patch = PatchOp::replace("/gold", content + old_gold);
+        let gold = if negative {
+            old_gold.checked_sub(content).unwrap_or(0)
+        } else {
+            old_gold + content
+        };
+        let patch = PatchOp::replace("/gold", gold);
         let record = DB.update((ITEM_TABLE, user_id)).patch(patch).await?;
         debug!("Patched Gold: {:?}", record);
         Ok(record)
@@ -125,18 +144,19 @@ impl SurrealProducer {
     ) -> CarrionResult<Response> {
         let record_id = match thing {
             Some(thing) => {
-                let rec: Option<Record> = DB.update(thing.clone()).content(enemy.clone()).await?;
-                assert_eq!(rec.unwrap().id, thing, "Failed to update enemy");
+                let record: Option<Record> =
+                    DB.update(thing.clone()).content(enemy.clone()).await?;
+                debug_assert_eq!(record.unwrap().id, thing, "Failed to update enemy");
                 thing
-            },
+            }
             None => {
                 let record: Vec<Record> = DB.create(ENEMY_TABLE).content(enemy.clone()).await?;
                 record.first().unwrap().id.clone()
             }
         };
         let relate = format!(
-            "relate {}:{}->fighting->{} set time.created = time::now(); delete enemies where state != 'Alive' return none;",
-            CHARACTER_TABLE, character.user_id, record_id
+            "relate {}:{}->fighting->{}; delete {} where state != 'Alive' return none;",
+            CHARACTER_TABLE, character.user_id, record_id, ENEMY_TABLE
         );
         let groups = DB
             .query(relate)
@@ -144,7 +164,6 @@ impl SurrealProducer {
             .expect("Failed to relate enemy to user");
         Ok(groups)
     }
-
 }
 
 #[cfg(test)]
@@ -160,16 +179,23 @@ mod test {
         let gold = 100;
         let user_id = 123456789;
         let items = crate::items::Items::default();
-        let items_record = SurrealProducer::store_user_items(items, user_id)
+        let _items_record = SurrealProducer::store_user_items(items, user_id)
             .await
             .unwrap();
-        let record = SurrealProducer::patch_user_gold(gold, user_id).await;
+        let _record = SurrealProducer::patch_user_gold(gold, user_id, false).await;
         let items_fetch = SurrealConsumer::get_items(user_id).await.unwrap();
         assert_eq!(items_fetch.unwrap().gold, gold as u64);
         let more_gold = 200;
-        let record = SurrealProducer::patch_user_gold(more_gold, user_id).await;
+        let _record = SurrealProducer::patch_user_gold(more_gold, user_id, false).await;
         let items_fetch = SurrealConsumer::get_items(user_id).await.unwrap();
         assert_eq!(items_fetch.unwrap().gold, more_gold as u64 + gold as u64);
+        let negative_gold = 100;
+        let _record = SurrealProducer::patch_user_gold(negative_gold, user_id, true).await;
+        let items_fetch = SurrealConsumer::get_items(user_id).await.unwrap();
+        assert_eq!(
+            items_fetch.unwrap().gold,
+            (more_gold + gold - negative_gold) as u64
+        );
     }
 
     #[tokio::test]
@@ -183,7 +209,7 @@ mod test {
         SurrealProducer::create_character(character.clone())
             .await
             .unwrap();
-        let groups = SurrealProducer::store_related_enemy(&character, &enemy, None)
+        let _groups = SurrealProducer::store_related_enemy(&character, &enemy, None)
             .await
             .unwrap();
 
@@ -214,14 +240,15 @@ mod test {
         SurrealProducer::create_character(character.clone())
             .await
             .unwrap();
-        let groups = SurrealProducer::store_related_enemy(&character, &enemy, None)
+        let _groups = SurrealProducer::store_related_enemy(&character, &enemy, None)
             .await
             .unwrap();
         let (mut enemy, id) = SurrealConsumer::get_related_enemies(&character)
             .await
             .unwrap()
             .first()
-            .unwrap().clone();
+            .unwrap()
+            .clone();
         enemy.state = EnemyState::Dead;
         println!("enemy: {:?}", enemy);
         println!("id: {:?}", id);
@@ -231,8 +258,7 @@ mod test {
         let enemies = SurrealConsumer::get_related_enemies(&character)
             .await
             .unwrap();
-
-
+        println!("enemies: {:?}", enemies);
         assert_eq!(enemies.len(), 0, "Enemy should be dead {:?}", enemies);
     }
 }

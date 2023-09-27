@@ -1,15 +1,15 @@
 use crate::classes::Classes;
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
-use crate::enemies::{Mob, MobGrade};
-use crate::items::Items;
+use crate::enemies::Mob;
+
 use crate::player::Character;
 use crate::skills::Skill;
 use crate::traits::CharacterTraits;
 use crate::{Context, Error};
 use crate::{EnemyEvents, ValidEnum};
-use tracing::field::debug;
-use tracing::{debug, info, warn};
+
+use tracing::{info, warn};
 
 /// Show this help menu
 #[poise::command(prefix_command, track_edits, slash_command)]
@@ -310,20 +310,43 @@ pub async fn battle(
                             .await?;
                         }
                         Some(gold) => {
-                            let base_cost = 200;
                             let gold = gold.gold;
-                            let cost = base_cost * mob.grade() as u64;
+                            let character = SurrealConsumer::get_character(user_id)
+                                .await?
+                                .expect("Failed to get character");
+                            let enemy = mob.generate(&character);
+                            let cost = (enemy.gold * 3) / enemy.kind.grade() as u64;
                             if gold < cost {
                                 ctx.send(|b| {
-                                    b.content(format!("You need {} gold to battle a {}", cost, mob))
-                                        .ephemeral(true)
+                                    b.content(format!(
+                                        "You need {} gold to battle a  {}",
+                                        cost, mob
+                                    ))
+                                    .ephemeral(true)
                                 })
                                 .await?;
                                 return Ok(());
                             }
-                            let character = SurrealConsumer::get_character(user_id)
-                                .await?
-                                .expect("Failed to get character");
+                            SurrealProducer::store_related_enemy(&character, &enemy, None)
+                                .await
+                                .expect("Failed to store enemy");
+
+                            SurrealProducer::patch_user_gold(cost, user_id, true)
+                                .await
+                                .expect("Failed to patch gold");
+
+                            let mut response = String::new();
+                            response.push_str("`");
+                            response.push_str(&format!(
+                                "You spent {} gold to battle a {}\n",
+                                cost, mob
+                            ));
+                            response.push_str(&format!(
+                                "Your enemy: {} was added to your battle queue\n",
+                                enemy.kind
+                            ));
+                            response.push_str("`");
+                            ctx.send(|b| b.content(response).ephemeral(true)).await?;
                         }
                     }
                 }
@@ -337,6 +360,5 @@ pub async fn battle(
             }
         }
     }
-
     Ok(())
 }

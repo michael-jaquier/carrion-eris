@@ -1,66 +1,13 @@
 use proc_macro2::TokenStream as TokenStream2;
-use proc_macro2::TokenStream;
-use proc_macro_error::{abort, abort_call_site, ResultExt};
+
 use quote::quote;
 use syn::{
     self,
-    parse::{Parse, ParseStream},
-    punctuated::Punctuated,
-    Attribute, Ident, LitStr, Token,
+
+
 };
 
 use syn::{DeriveInput, Expr};
-
-struct MobAttributes {
-    grade: Option<syn::Expr>,
-    actions: Option<syn::Expr>,
-    alignment: Option<syn::Expr>,
-    vulnerability: Option<syn::Expr>,
-}
-
-impl Parse for MobAttributes {
-    fn parse(input: ParseStream) -> syn::Result<Self> {
-        let name: Ident = input.parse()?;
-        let name_str = name.to_string();
-
-        match input.parse::<Expr>() {
-            Ok(expr) => {
-                if name_str == "MobGrade" {
-                    Ok(MobAttributes {
-                        grade: Some(expr),
-                        actions: None,
-                        alignment: None,
-                        vulnerability: None,
-                    })
-                } else if name_str == "MobAction" {
-                    Ok(MobAttributes {
-                        grade: None,
-                        actions: Some(expr),
-                        alignment: None,
-                        vulnerability: None,
-                    })
-                } else if name_str == "Alignment" {
-                    Ok(MobAttributes {
-                        grade: None,
-                        actions: None,
-                        alignment: Some(expr),
-                        vulnerability: None,
-                    })
-                } else if name_str == "DamageType" {
-                    Ok(MobAttributes {
-                        grade: None,
-                        actions: None,
-                        alignment: None,
-                        vulnerability: Some(expr),
-                    })
-                } else {
-                    abort!(name, format!("Invalid attribute: {}", name_str));
-                }
-            }
-            Err(_) => abort!(name, "Idiot Macro Invalid attribute"),
-        }
-    }
-}
 
 pub fn eris_mob(ast: &DeriveInput) -> TokenStream2 {
     let name = &ast.ident;

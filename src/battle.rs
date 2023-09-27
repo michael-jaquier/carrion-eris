@@ -1,6 +1,6 @@
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
-use crate::enemies::{Enemy, Mob, MobGrade};
+use crate::enemies::{Enemy, Mob};
 use crate::player::{Character, SkillSet};
 
 use rand::random;
@@ -56,8 +56,6 @@ async fn single_turn(character: &mut Character, enemy: &mut Enemy, battle_info: 
     }
 }
 
-fn extract() {}
-
 async fn battle(mut character: &mut Character) -> BattleInfo {
     let mut enemy;
     let mut enemy_id = None;
@@ -77,11 +75,9 @@ async fn battle(mut character: &mut Character) -> BattleInfo {
         single_turn(&mut character, &mut enemy, &mut battle_info).await;
     }
 
-    if character.hp <= 0 {
-        SurrealProducer::store_related_enemy(&character, &enemy, enemy_id)
-            .await
-            .expect("Failed to store enemy");
-    }
+    SurrealProducer::store_related_enemy(&character, &enemy, enemy_id)
+        .await
+        .expect("Failed to store enemy");
 
     battle_info
 }
@@ -109,9 +105,13 @@ pub async fn all_battle() -> BattleResults {
 
                 let result = battle(&mut character).await;
 
-                SurrealProducer::patch_user_gold(result.gold_gained.clone(), character.user_id)
-                    .await
-                    .expect("Failed to patch gold");
+                SurrealProducer::patch_user_gold(
+                    result.gold_gained.clone(),
+                    character.user_id,
+                    false,
+                )
+                .await
+                .expect("Failed to patch gold");
 
                 if character.hp > character.max_hp as i32 {
                     warn!("Character: {:?} has more hp than max_hp", character)

@@ -48,40 +48,6 @@ impl AttackModifiers {
         self.dice_set.magical()
     }
 
-    fn set_advantage_state(&mut self, advantage: AdvantageState) {
-        match advantage {
-            AdvantageState::Advantage => {
-                if let Some(d) = &mut self.physical_mut() {
-                    d.advantage();
-                }
-                if let Some(d) = self.magical_mut().as_mut() {
-                    d.advantage();
-                }
-            }
-            AdvantageState::Disadvantage => {
-                if let Some(d) = self.physical_mut().as_mut() {
-                    d.disadvantage();
-                }
-                if let Some(d) = self.magical_mut().as_mut() {
-                    d.disadvantage();
-                }
-            }
-            _ => {}
-        }
-    }
-
-    fn add_physical_die(&mut self, die: Vec<DieObject>) {
-        if let Some(d) = self.physical_mut().as_mut() {
-            d.add_die(die.clone());
-        }
-    }
-
-    fn add_magical_die(&mut self, die: Vec<DieObject>) {
-        if let Some(d) = self.magical_mut().as_mut() {
-            d.add_die(die.clone());
-        }
-    }
-
     fn add_existing_die(&mut self, die: Vec<DieObject>) {
         if self.physical_mut().is_some() && self.magical_mut().is_some() {
             for d in die {
@@ -99,43 +65,6 @@ impl AttackModifiers {
             if let Some(d) = self.magical_mut().as_mut() {
                 d.add_die(die.clone());
             }
-        }
-    }
-
-    fn set_negative_die(&mut self, die: Vec<DieObject>) {
-        if self.physical_mut().is_some() && self.magical_mut().is_some() {
-            for _d in die {
-                let _choice = thread_rng().gen_bool(0.5);
-            }
-        }
-
-        if let Some(_d) = self.physical_mut().as_mut() {}
-        if let Some(_d) = self.magical_mut().as_mut() {}
-    }
-
-    fn lower_critical_targets(&mut self) {
-        if let Some(d) = self.physical_mut().as_mut() {
-            d.dice().iter_mut().for_each(|d| {
-                d.set_critical(-1);
-            });
-        }
-        if let Some(d) = self.magical_mut().as_mut() {
-            d.dice().iter_mut().for_each(|d| {
-                d.set_critical(-1);
-            });
-        }
-    }
-
-    fn set_critical_die(&mut self, die: Die) {
-        if let Some(d) = self.physical_mut().as_mut() {
-            d.dice().iter_mut().for_each(|d| {
-                d.set_critical_die(die.clone());
-            });
-        }
-        if let Some(d) = self.magical_mut().as_mut() {
-            d.dice().iter_mut().for_each(|d| {
-                d.set_critical_die(die.clone());
-            });
         }
     }
 
@@ -198,7 +127,7 @@ impl AttackModifiers {
                 &self.player.mutations().get_physical_attack(),
             );
             if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
-                dmg + (dmg * dice.roll() as f64 / 5.0);
+                dmg += dmg * dice.roll() as f64 / 5.0;
             }
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
@@ -213,7 +142,7 @@ impl AttackModifiers {
                 &self.player.mutations().get_physical_attack(),
             );
             if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
-                dmg + (dmg * dice.roll() as f64 / 5.0);
+                dmg += dmg * dice.roll() as f64 / 5.0;
             }
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
@@ -366,10 +295,10 @@ mod test {
 
     #[test]
     fn magic_missile_dps() {
-        let mut player = Character::new("test".to_string(), 1, Classes::Wizard);
+        let player = Character::new("test".to_string(), 1, Classes::Wizard);
 
         let enemy = crate::enemies::Enemy::weak(crate::enemies::Mob::Orc, 1);
-        let mut attack = AttackModifiers::builder(&player, &enemy, &SkillSet::default());
+        let attack = AttackModifiers::builder(&player, &enemy, &SkillSet::default());
 
         let ten_thousand_rolls = (0..10000)
             .map(|_| attack.generate_damage_values())

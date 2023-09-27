@@ -3,14 +3,12 @@ use crate::items::Item;
 use crate::player::{ActionDice, Character};
 use crate::skills::MobAction;
 use crate::units::Attributes;
-use crate::units::{AttackType, DamageType};
+use crate::units::DamageType;
 use eris_macro::{ErisDisplayEmoji, ErisMob, ErisValidEnum};
-use rand::distributions::Standard;
-use rand::prelude::{Distribution, SliceRandom};
+
+use rand::prelude::{ SliceRandom};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
-use tracing::info;
 
 use crate::units::Alignment;
 
@@ -35,18 +33,6 @@ pub struct Enemy {
     actions: Vec<MobAction>,
 }
 impl Enemy {
-    fn ranges(level: u32) -> u32 {
-        let mut rng = rand::thread_rng();
-        let ranges = 1..(level.pow(3)) + 1;
-        rng.gen_range(ranges)
-    }
-
-    fn slow_scaling_ranges(level: u32) -> u32 {
-        let mut rng = rand::thread_rng();
-        let ranges = 1..(level + 1);
-        rng.gen_range(ranges)
-    }
-
     fn linear_scaling(level: u32) -> u32 {
         let mut rng = rand::thread_rng();
         let ranges = 1..(level * 3);
@@ -61,13 +47,6 @@ impl Enemy {
     fn hp_gain(attributes: &Attributes, level: u32) -> u32 {
         let constitution = attributes.constitution.inner();
         constitution * 10 + level * 10
-    }
-
-    fn dice_scaling_log(level: u32) -> Dice {
-        Dice::new(vec![
-            Die::D20.into();
-            Enemy::super_logarithm_scaling(level) as usize
-        ])
     }
 
     pub fn weak(mob: Mob, level: u32) -> Enemy {

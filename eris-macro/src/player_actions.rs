@@ -90,7 +90,7 @@ pub fn eris_emoji(ast: &DeriveInput) -> TokenStream2 {
     for variant in variants {
         for attr in variant.attrs.iter() {
             if attr.path().is_ident("emoji") {
-                let  stat_value: Expr = attr.parse_args().unwrap();
+                let stat_value: Expr = attr.parse_args().unwrap();
                 let f = match stat_value {
                     Expr::Lit(lit) => {
                         let lit = lit.lit;

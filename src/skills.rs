@@ -228,7 +228,6 @@ impl MobAction {
                     base_die.magical = Some(Dice::new(vec![Die::D20.into(); 5]));
                     base_die.physical = Some(Dice::new(vec![Die::D20.into(); 5]));
                 }
-
             }
         }
     }

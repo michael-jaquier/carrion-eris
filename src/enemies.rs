@@ -6,7 +6,7 @@ use crate::units::Attributes;
 use crate::units::DamageType;
 use eris_macro::{ErisDisplayEmoji, ErisMob, ErisValidEnum};
 
-use rand::prelude::{ SliceRandom};
+use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 

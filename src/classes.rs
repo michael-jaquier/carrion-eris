@@ -22,7 +22,6 @@ impl Classes {
             Classes::Warrior => Skill::Slash,
             Classes::Wizard => Skill::MagicMissile,
             Classes::Sorcerer => Skill::FireBall,
-
         }
     }
 }

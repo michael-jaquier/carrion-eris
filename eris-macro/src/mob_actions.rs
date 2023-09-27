@@ -1,11 +1,7 @@
 use proc_macro2::TokenStream as TokenStream2;
 
 use quote::quote;
-use syn::{
-    self,
-
-
-};
+use syn::{self};
 
 use syn::{DeriveInput, Expr};
 

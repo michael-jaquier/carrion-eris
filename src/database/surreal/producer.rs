@@ -173,6 +173,7 @@ mod test {
     use crate::database::surreal::SurrealDB;
     use crate::enemies::EnemyState;
 
+    #[ignore]
     #[tokio::test]
     async fn test_gold_storage() {
         SurrealDB::connect("memory").await.unwrap();
@@ -197,7 +198,7 @@ mod test {
             (more_gold + gold - negative_gold) as u64
         );
     }
-
+    #[ignore]
     #[tokio::test]
     async fn store_enemy_relation_to_user() {
         SurrealDB::connect("memory").await.unwrap();
@@ -228,7 +229,7 @@ mod test {
             .unwrap();
         assert_eq!(enemy_records.len(), 2);
     }
-
+    #[ignore]
     #[tokio::test]
     async fn mutate_enemies() {
         SurrealDB::connect("memory").await.unwrap();

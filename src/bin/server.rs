@@ -7,7 +7,6 @@ use poise::{async_trait, serenity_prelude as serenity};
 
 use serenity::client::Context;
 
-
 use serenity::model::channel::GuildChannel;
 use serenity::model::gateway::Presence;
 use std::sync::atomic::AtomicBool;

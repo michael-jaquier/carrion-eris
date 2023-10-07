@@ -96,7 +96,7 @@ mod test {
     #[test]
     fn generate_random_item() {
         let item = ItemsWeHave::generate_random();
-        assert!(item.name.len() > 0);
+        assert!(!item.name.is_empty());
     }
 
     #[test]

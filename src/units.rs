@@ -215,7 +215,7 @@ impl Attribute {
         }
     }
     pub fn absolute_difference(&self, other: &Self) -> i32 {
-        **self as i32 - **other as i32
+        **self - **other
     }
     pub fn plus(&mut self, other: i32) {
         match self {

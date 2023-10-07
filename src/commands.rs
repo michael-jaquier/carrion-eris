@@ -2,7 +2,6 @@ use crate::classes::Classes;
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
 use crate::enemies::Mob;
-use surrealdb::iam::verify::token;
 
 use crate::player::Character;
 use crate::skills::Skill;
@@ -111,16 +110,16 @@ pub async fn delete(
     let now = tokio::time::Instant::now();
     let e = SurrealProducer::delete_character(ctx.author().id.0).await?;
     let x = SurrealProducer::drop_character_skills(ctx.author().id.0).await?;
-    let y = SurrealProducer::delete_related(ctx.author().id.0).await?;
-    info!(?e, ?x, ?y);
+    SurrealProducer::delete_related(ctx.author().id.0).await?;
+    info!(?e, ?x, "delete_character");
     match e {
         None => {
-            ctx.reply(format!("No character to delete")).await?;
+            ctx.reply("No character to delete").await?;
             info!("delete_character finish {:?}", now.elapsed());
             Ok(())
         }
         Some(_e) => {
-            ctx.reply(format!("Deleted character")).await?;
+            ctx.reply("Deleted character").await?;
             info!("delete_character finish {:?}", now.elapsed());
             Ok(())
         }
@@ -158,11 +157,8 @@ pub async fn create(
                         .await?;
                     }
                     None => {
-                        ctx.send(|b| {
-                            b.content(format!("Failed to create character"))
-                                .ephemeral(true)
-                        })
-                        .await?;
+                        ctx.send(|b| b.content("Failed to create character").ephemeral(true))
+                            .await?;
                     }
                 }
             }
@@ -213,7 +209,7 @@ pub async fn me(
             .await?;
         }
         None => {
-            ctx.send(|b| b.content(format!("No character found")).ephemeral(true))
+            ctx.send(|b| b.content("No character found").ephemeral(true))
                 .await?;
         }
     }
@@ -305,7 +301,7 @@ pub async fn sell(
     let user_id = ctx.author().id.0;
     let items = SurrealConsumer::get_items(user_id).await?;
     if items.is_none() {
-        ctx.send(|b| b.content(format!("No items found")).ephemeral(true))
+        ctx.send(|b| b.content("No items found").ephemeral(true))
             .await?;
         return Ok(());
     }
@@ -357,7 +353,7 @@ pub async fn items(
         return match slot {
             Ok(slot) => match SurrealConsumer::get_items(user_id).await? {
                 None => {
-                    ctx.send(|b| b.content(format!("No items found")).ephemeral(true))
+                    ctx.send(|b| b.content("No items found").ephemeral(true))
                         .await?;
                     Ok(())
                 }
@@ -390,7 +386,7 @@ pub async fn items(
                 .await?;
         }
         None => {
-            ctx.send(|b| b.content(format!("No items found")).ephemeral(true))
+            ctx.send(|b| b.content("No items found").ephemeral(true))
                 .await?;
         }
     }
@@ -411,7 +407,7 @@ pub async fn equip(
         let user_id = ctx.author().id.0;
         let items = SurrealConsumer::get_items(user_id).await?;
         if items.is_none() {
-            ctx.send(|b| b.content(format!("No items found")).ephemeral(true))
+            ctx.send(|b| b.content("No items found").ephemeral(true))
                 .await?;
             info!("equip finish {:?}", now.elapsed());
             return Ok(());
@@ -419,11 +415,8 @@ pub async fn equip(
         let mut items = items.unwrap();
         let selected_item = items.take(item);
         if selected_item.is_none() {
-            ctx.send(|b| {
-                b.content(format!("Item to equip not found"))
-                    .ephemeral(true)
-            })
-            .await?;
+            ctx.send(|b| b.content("Item to equip not found").ephemeral(true))
+                .await?;
             info!("equip finish {:?}", now.elapsed());
             return Ok(());
         }
@@ -431,7 +424,7 @@ pub async fn equip(
             .await?
             .expect("Failed to get character");
 
-        let old_item = character.equipment.equip(selected_item.unwrap().clone());
+        let old_item = character.equipment.equip(selected_item.unwrap());
         if let Some(old_item) = old_item {
             items.push(old_item);
             SurrealProducer::store_user_items(items, user_id)
@@ -440,7 +433,7 @@ pub async fn equip(
         }
 
         SurrealProducer::create_or_update_character(character).await?;
-        ctx.send(|b| b.content(format!("Equipped item")).ephemeral(true))
+        ctx.send(|b| b.content("Equipped item").ephemeral(true))
             .await?;
     }
     info!("equip finish {:?}", now.elapsed());
@@ -497,7 +490,7 @@ pub async fn battle(
                                 }
                                 vec_enemys.push(enemy);
                             }
-                            if vec_enemys.len() == 0 {
+                            if vec_enemys.is_empty() {
                                 ctx.send(|b| {
                                     b.content(format!(
                                         "You do not have enough gold to battle a {}",
@@ -536,7 +529,7 @@ pub async fn battle(
 
             if total_battle_cost > 0 {
                 let mut response = String::new();
-                response.push_str("`");
+                response.push('`');
                 response.push_str(&format!(
                     "You spent {} gold to battle {} {}'s\n",
                     total_battle_cost,
@@ -547,7 +540,7 @@ pub async fn battle(
                     "Your enemy: {} was added to your battle queue\n",
                     Mob::try_from(command.clone()).unwrap()
                 ));
-                response.push_str("`");
+                response.push('`');
                 ctx.send(|b| b.content(response).ephemeral(true)).await?;
             } else {
                 ctx.send(|b| {

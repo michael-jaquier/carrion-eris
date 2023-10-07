@@ -51,10 +51,7 @@ impl DieObject {
     }
     pub fn set_critical(&mut self, critical: i32) {
         if critical < 0 {
-            self.critical = self
-                .critical
-                .checked_sub(critical.abs() as u32)
-                .unwrap_or(0);
+            self.critical = self.critical.saturating_sub(critical.unsigned_abs());
         } else {
             self.critical = self.critical.checked_add(critical as u32).unwrap_or(0);
         }
@@ -195,12 +192,10 @@ impl AdvantageState {
 
 impl From<i32> for AdvantageState {
     fn from(n: i32) -> Self {
-        if n > 0 {
-            AdvantageState::Advantage
-        } else if n < 0 {
-            AdvantageState::Disadvantage
-        } else {
-            AdvantageState::None
+        match n {
+            0 => AdvantageState::None,
+            1..=i32::MAX => AdvantageState::Advantage,
+            i32::MIN..=-1 => AdvantageState::Disadvantage,
         }
     }
 }
@@ -332,9 +327,9 @@ mod tests {
     fn test_lower_crit() {
         let die = Die::D20;
         let mut dice = Dice::new(vec![die.into()]);
-        let old_crit = dice.dice()[0].critical.clone();
+        let old_crit = dice.dice()[0].critical;
         dice.dice().iter_mut().for_each(|d| d.set_critical(-1));
-        let new_crit = dice.dice()[0].critical.clone();
+        let new_crit = dice.dice()[0].critical;
         assert_eq!(new_crit, (old_crit - 1));
     }
 

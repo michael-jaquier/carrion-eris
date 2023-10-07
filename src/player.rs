@@ -25,19 +25,10 @@ pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
 pub type PhysicalDice = Option<Dice>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ActionDice {
     pub physical: Option<Dice>,
     pub magical: Option<Dice>,
-}
-
-impl Default for ActionDice {
-    fn default() -> Self {
-        Self {
-            physical: None,
-            magical: None,
-        }
-    }
 }
 
 impl ActionDice {
@@ -120,11 +111,11 @@ impl Display for SkillSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut string = String::new();
         string.push_str("```");
-        string.push_str("\n");
+        string.push('\n');
         string.push_str(&format!("Skill: {}\n", self.skill));
         string.push_str(&format!("Level: {}\n", self.level));
         string.push_str(&format!("Experience: {}\n", self.experience));
-        string.push_str("\n");
+        string.push('\n');
         string.push_str("```");
         write!(f, "{}", string)
     }
@@ -151,7 +142,7 @@ impl SkillSet {
         self.damage(AttackModifiers::builder(player, enemy, self))
     }
     pub fn experience_to_next_level(&self) -> u64 {
-        exp_scaling(self.level.pow(2)) as u64
+        exp_scaling(self.level.pow(2))
     }
 
     pub fn action_base_damage(&self, player: &Character) -> ActionDice {
@@ -267,8 +258,7 @@ impl Character {
         self.hp = self.max_hp as i32;
         self.experience = self
             .experience
-            .checked_sub(self.experience_to_next_level())
-            .unwrap_or(0);
+            .saturating_sub(self.experience_to_next_level());
     }
 
     pub fn rest(&mut self) {
@@ -314,15 +304,12 @@ impl Character {
                 }
             }
             battle_info.skill_experience_gained += enemy.experience;
-            while self.current_skill.experience
-                >= self.current_skill.experience_to_next_level() as u64
-            {
+            while self.current_skill.experience >= self.current_skill.experience_to_next_level() {
                 self.current_skill.level += 1;
                 self.current_skill.experience = self
                     .current_skill
                     .experience
-                    .checked_sub(self.current_skill.experience_to_next_level())
-                    .unwrap_or(0);
+                    .saturating_sub(self.current_skill.experience_to_next_level());
             }
         }
     }
@@ -343,8 +330,6 @@ impl Character {
         if defense.dodge() {
             return;
         }
-
-
 
         if action.physical().is_some() {
             let damage = action.physical().unwrap().roll();
@@ -375,14 +360,14 @@ impl Display for Character {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut string = String::new();
         string.push_str("```");
-        string.push_str("\n");
+        string.push('\n');
         string.push_str(&format!("Name: {}\n", self.name));
         string.push_str(&format!("Level: {}\n", self.level));
         string.push_str(&format!("Class: {}\n", self.class));
         string.push_str(&format!("HP: {}/{}\n", self.hp, self.max_hp));
         string.push_str(&format!("Experience: {}\n", self.experience));
         string.push_str(&format!("Attributes: {}\n", self.attributes));
-        string.push_str(&format!("Traits:\n",));
+        string.push_str("Traits:\n");
 
         for tr in &self.traits {
             string.push_str(&format!("\t{}\n", tr));

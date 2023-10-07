@@ -63,23 +63,21 @@ fn main() -> std::io::Result<()> {
     // Create a vector to hold your structs.
     let mut struct_vec: Vec<IndividualItem> = Vec::new();
     // Read the file names in the directory.
-    for entry in entries {
-        if let Ok(entry) = entry {
-            // Get the file path.
-            let file_path = entry.path();
+    for entry in entries.flatten() {
+        // Get the file path.
+        let file_path = entry.path();
 
-            // Check if the file is a YAML file.
-            if let Some(extension) = file_path.extension() {
-                if extension == "yaml" {
-                    // Read the YAML file and deserialize it into your struct.
-                    let file_content = fs::read_to_string(&file_path)
-                        .expect(format!("Failed to read file {:?}", file_path).as_str());
-                    let yaml_struct: IndividualItem = serde_yaml::from_str(&file_content)
-                        .expect(format!("Failed to parse file {:?}", file_path).as_str());
+        // Check if the file is a YAML file.
+        if let Some(extension) = file_path.extension() {
+            if extension == "yaml" {
+                // Read the YAML file and deserialize it into your struct.
+                let file_content = fs::read_to_string(&file_path)
+                    .unwrap_or_else(|_| panic!("Failed to read file {:?}", file_path));
+                let yaml_struct: IndividualItem = serde_yaml::from_str(&file_content)
+                    .unwrap_or_else(|_| panic!("Failed to read file {:?}", file_path));
 
-                    // Add the deserialized struct to the vector.
-                    struct_vec.push(yaml_struct);
-                }
+                // Add the deserialized struct to the vector.
+                struct_vec.push(yaml_struct);
             }
         }
     }
@@ -101,82 +99,76 @@ fn main() -> std::io::Result<()> {
     source_code.push_str("use std::f64::consts::E;\n");
     for st in &struct_vec {
         let struct_name = st.name.to_pascal_case();
-        source_code.push_str(&format!("#[derive(Debug, Clone, PartialEq)]\n"));
+        source_code.push_str("#[derive(Debug, Clone, PartialEq)]\n");
         source_code.push_str(&format!("pub struct {} {{}}", struct_name));
-        source_code.push_str(&format!("\n"));
+        source_code.push('\n');
         source_code.push_str(&format!("impl {} {{", struct_name));
-        source_code.push_str(&format!("\n"));
-        let function = format!("\tpub fn generate(&self) -> IndividualItem {{");
-        source_code.push_str(&function);
-        source_code.push_str(&format!("\n\t\t"));
-        source_code.push_str(&format!("IndividualItem {{"));
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push('\n');
+        source_code.push_str("\tpub fn generate(&self) -> IndividualItem {");
+        source_code.push_str("\n\t\t");
+        source_code.push_str("IndividualItem {");
+        source_code.push_str("\n\t\t\t");
         source_code.push_str(&format!("name: \"{}\".to_string(),", st.name));
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         source_code.push_str(&format!("description: \"{}\".to_string(),", st.description));
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         source_code.push_str(&format!("slot: EquipmentSlot::{},", st.slot));
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         if let Some(armor) = st.armor.clone() {
             source_code.push_str(&format!(
                 "armor: SerialDie {{die:Die::{}, quantity:{} }}.to_die(),",
                 armor.die, armor.quantity
             ));
         } else {
-            source_code.push_str(&format!(
-                "armor: SerialDie {{die:Die::D4, quantity:0 }}.to_die(),"
-            ));
+            source_code.push_str("armor: SerialDie {die:Die::D4, quantity:0 }.to_die(),");
         }
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         if let Some(resistance) = st.resistance.clone() {
             let tuple_vec: Vec<(_, _)> = resistance.iter().map(|(k, v)| (k, v)).collect();
             let mut ds = String::new();
-            ds.push_str("[");
+            ds.push('[');
             for (k, v) in tuple_vec {
                 ds.push_str(&format!(
                     "(DamageType::{}, SerialDie {{ die: Die::{}, quantity: {} }}.to_die()),",
                     k, v.die, v.quantity
                 ));
             }
-            ds.push_str("]");
+            ds.push(']');
             source_code.push_str(&format!("resistance: HashMap::from({}),", ds));
         } else {
-            source_code.push_str(&format!("resistance: HashMap::new(),"));
+            source_code.push_str("resistance: HashMap::new(),");
         }
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         if let Some(damage) = st.damage.clone() {
             let tuple_vec: Vec<(_, _)> = damage.iter().map(|(k, v)| (k, v)).collect();
             let mut ds = String::new();
-            ds.push_str("[");
+            ds.push('[');
             for (k, v) in tuple_vec {
                 ds.push_str(&format!(
                     "(DamageType::{}, SerialDie {{ die: Die::{}, quantity: {} }}.to_die()),",
                     k, v.die, v.quantity
                 ));
             }
-            ds.push_str("]");
+            ds.push(']');
             source_code.push_str(&format!("damage: HashMap::from({}),", ds));
         } else {
-            source_code.push_str(&format!("damage: HashMap::new(),"));
+            source_code.push_str("damage: HashMap::new(),");
         }
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         if let Some(attribute_bonus) = st.attribute_bonus.clone() {
             source_code.push_str(&format!("attribute_bonus: {:?}.into(),", attribute_bonus));
         } else {
-            source_code.push_str(&format!(
-                "attribute_bonus: SerialAttributes::zero().into(),"
-            ));
+            source_code.push_str("attribute_bonus: SerialAttributes::zero().into(),");
         }
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         source_code.push_str(&format!("action: {},", st.action.unwrap_or(0)));
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         source_code.push_str(&format!("rarity: Rarity::{},", st.rarity));
-        source_code.push_str(&format!("\n\t\t\t"));
+        source_code.push_str("\n\t\t\t");
         source_code.push_str(&format!("value: {},", st.value));
-        source_code.push_str(&format!("\n\t\t}}\n"));
-        source_code.push_str(&format!("\t}}\n"));
-
-        source_code.push_str(&format!("}}\n"));
+        source_code.push_str("\n\t\t}\n");
+        source_code.push_str("\t}\n");
+        source_code.push_str("}\n");
     }
     source_code.push_str("#[derive(ErisConstructedTemplate, Serialize, Deserialize, Hash, PartialEq, Clone, Copy, Debug, Eq)]\n");
     source_code.push_str("pub enum ItemsWeHave {\n");

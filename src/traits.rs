@@ -24,6 +24,7 @@ pub enum TraitMutation {
     CriticalMultiplier(f64),
 }
 
+#[derive(Default)]
 pub struct TraitMutations {
     magic_attack: Vec<TraitMutation>,
     physical_attack: Vec<TraitMutation>,
@@ -59,11 +60,8 @@ impl TraitMutations {
     pub(crate) fn multi(mutations: &Vec<TraitMutation>) -> f64 {
         let mut multi = 1.0;
         for m in mutations {
-            match m {
-                TraitMutation::MultiplicativeBonus(e) => {
-                    multi *= e;
-                }
-                _ => {}
+            if let TraitMutation::MultiplicativeBonus(e) = m {
+                multi *= e;
             }
         }
         multi
@@ -72,11 +70,8 @@ impl TraitMutations {
     pub(crate) fn critical_advantage(mutations: &Vec<TraitMutation>) -> AdvantageState {
         let mut critical_advantage = AdvantageState::None;
         for m in mutations {
-            match m {
-                TraitMutation::CriticalAdvantage => {
-                    critical_advantage = AdvantageState::Advantage;
-                }
-                _ => {}
+            if let TraitMutation::CriticalAdvantage = m {
+                critical_advantage = AdvantageState::Advantage;
             }
         }
         critical_advantage
@@ -85,11 +80,8 @@ impl TraitMutations {
     pub(crate) fn critical_multiplier(mutations: &Vec<TraitMutation>) -> f64 {
         let mut critical_multiplier = 1.0;
         for m in mutations {
-            match m {
-                TraitMutation::CriticalMultiplier(e) => {
-                    critical_multiplier *= e;
-                }
-                _ => {}
+            if let TraitMutation::CriticalMultiplier(e) = m {
+                critical_multiplier *= e;
             }
         }
         critical_multiplier
@@ -126,11 +118,8 @@ impl TraitMutations {
     pub fn action_points(&self) -> u32 {
         let mut action_points = 0;
         for tr in &self.actions {
-            match tr {
-                TraitMutation::ActionBonus(times) => {
-                    action_points += times;
-                }
-                _ => {}
+            if let TraitMutation::ActionBonus(times) = tr {
+                action_points += times;
             }
         }
         action_points
@@ -141,13 +130,13 @@ impl TraitMutations {
 
         match tr {
             TraitMutation::FlatIncrease(dice) => {
-                if !dice_check(&dice) {
+                if !dice_check(dice) {
                     warn!("Invalid Mutation for dodge {}. Skipping", tr);
                     return false;
                 }
             }
             TraitMutation::FlatDecrease(dice) => {
-                if !dice_check(&dice) {
+                if !dice_check(dice) {
                     warn!("Invalid Mutation for dodge {}. Skipping", tr);
                     return false;
                 }
@@ -174,9 +163,7 @@ impl TraitMutations {
         true
     }
     pub fn set_dodge(&mut self, tr: TraitMutation) {
-        let valid_dodge = match &tr {
-            _ => self.dodge_check(&tr),
-        };
+        let valid_dodge = self.dodge_check(&tr);
         if !valid_dodge {
             return;
         }
@@ -207,19 +194,6 @@ impl TraitMutations {
     }
     pub fn get_suppress(&self) -> &Vec<TraitMutation> {
         &self.suppress
-    }
-}
-
-impl Default for TraitMutations {
-    fn default() -> Self {
-        Self {
-            magic_attack: vec![],
-            dodge: vec![],
-            armor: vec![],
-            physical_attack: vec![],
-            suppress: vec![],
-            actions: vec![],
-        }
     }
 }
 

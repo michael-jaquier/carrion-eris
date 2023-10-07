@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 
-use crate::constructed::{ItemsWeHave, VenomweaveGloves};
+use crate::constructed::ItemsWeHave;
 
 #[derive(
     Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, ErisValidEnum, ErisDisplayEmoji,
@@ -63,7 +63,7 @@ impl From<String> for Rarity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Default)]
 pub struct Items {
     items: Vec<ItemsWeHave>,
     pub(crate) gold: u64,
@@ -93,7 +93,7 @@ impl Items {
     pub fn contains(&self, have_item: String) -> Option<ItemsWeHave> {
         for item in &self.items {
             if item.generate().name == have_item {
-                return Some(item.clone());
+                return Some(*item);
             }
         }
         None
@@ -188,61 +188,52 @@ impl Display for Items {
         }
 
         if helms.len() > EquipmentSlot::Helmet.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&helms);
         }
         if armors.len() > EquipmentSlot::Armor.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&armors);
         }
         if legs.len() > EquipmentSlot::Legs.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&legs);
         }
         if feet.len() > EquipmentSlot::Feet.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&feet);
         }
         if hands.len() > EquipmentSlot::Hands.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&hands);
         }
         if weapons.len() > EquipmentSlot::Weapon.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&weapons);
         }
         if shields.len() > EquipmentSlot::Shield.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&shields);
         }
         if rings.len() > EquipmentSlot::Ring.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&rings);
         }
         if amulets.len() > EquipmentSlot::Amulet.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&amulets);
         }
         if wonderous_items.len() > EquipmentSlot::WondrousItem.to_string().len() {
-            string.push_str("\n");
+            string.push('\n');
             string.push_str(&wonderous_items);
         }
 
-        string.push_str("\n");
+        string.push('\n');
         string.push_str("💰\t");
         string.push_str("Gold: ");
         string.push_str(&self.gold.to_string());
         string.push_str("\n```\n");
         write!(f, "{}", string)
-    }
-}
-
-impl Default for Items {
-    fn default() -> Self {
-        Self {
-            items: Vec::new(),
-            gold: 0,
-        }
     }
 }
 
@@ -270,7 +261,7 @@ impl NameMe {
         if self.player_equipped {
             return Some(new_item);
         }
-        return if let Some(item) = self.item {
+        if let Some(item) = self.item {
             if item.generate().rarity <= new_item.generate().rarity {
                 self.item = Some(new_item);
                 Some(item)
@@ -280,18 +271,18 @@ impl NameMe {
         } else {
             self.item = Some(new_item);
             None
-        };
+        }
     }
 
     pub fn equip(&mut self, new_item: ItemsWeHave) -> Option<ItemsWeHave> {
         self.player_equipped = true;
-        return if let Some(item) = self.item {
+        if let Some(item) = self.item {
             self.item = Some(new_item);
             Some(item)
         } else {
             self.item = Some(new_item);
             None
-        };
+        }
     }
 
     pub fn damage(&self) -> HashMap<DamageType, Dice> {
@@ -350,14 +341,6 @@ pub struct Equipment {
 }
 
 impl Equipment {
-    fn auto_equip_choose(old: ItemsWeHave, new: ItemsWeHave) -> (ItemsWeHave, ItemsWeHave) {
-        return if old.generate().rarity <= new.generate().rarity {
-            (old, new)
-        } else {
-            (new, old)
-        };
-    }
-
     pub fn equip(&mut self, new_item: ItemsWeHave) -> Option<ItemsWeHave> {
         let item = new_item.generate();
         match item.slot {
@@ -373,7 +356,7 @@ impl Equipment {
                     .ring
                     .iter()
                     .enumerate()
-                    .find(|(index, ring)| !ring.player_equipped)
+                    .find(|(_index, ring)| !ring.player_equipped)
                 {
                     self.ring[index].equip(new_item)
                 } else {
@@ -392,7 +375,7 @@ impl Equipment {
                     .wondrous_item
                     .iter()
                     .enumerate()
-                    .find(|(index, wonder)| !wonder.player_equipped)
+                    .find(|(_index, wonder)| !wonder.player_equipped)
                 {
                     self.wondrous_item[index].equip(new_item)
                 } else {
@@ -736,7 +719,7 @@ mod test {
             crate::items::EquipmentSlot::WondrousItem,
         );
         let mut equipment = crate::items::Equipment::default();
-        equipment.equip(wonder.clone());
+        equipment.equip(wonder);
         assert_eq!(equipment.wondrous_item[0].item(), Some(&wonder));
     }
 }

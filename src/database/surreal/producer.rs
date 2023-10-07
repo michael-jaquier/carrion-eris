@@ -123,7 +123,7 @@ impl SurrealProducer {
             }
         };
         let gold = if negative {
-            old_gold.checked_sub(content).unwrap_or(0)
+            old_gold.saturating_sub(content)
         } else {
             old_gold + content
         };
@@ -220,6 +220,8 @@ impl SurrealProducer {
 
 #[cfg(test)]
 mod test {
+    use std::default::Default;
+
     use super::*;
     use crate::database::surreal::consumer::SurrealConsumer;
     use crate::database::surreal::SurrealDB;
@@ -237,17 +239,17 @@ mod test {
             .unwrap();
         let _record = SurrealProducer::patch_user_gold(gold, user_id, false).await;
         let items_fetch = SurrealConsumer::get_items(user_id).await.unwrap();
-        assert_eq!(items_fetch.unwrap().gold, gold as u64);
+        assert_eq!(items_fetch.unwrap().gold, gold);
         let more_gold = 200;
         let _record = SurrealProducer::patch_user_gold(more_gold, user_id, false).await;
         let items_fetch = SurrealConsumer::get_items(user_id).await.unwrap();
-        assert_eq!(items_fetch.unwrap().gold, more_gold as u64 + gold as u64);
+        assert_eq!(items_fetch.unwrap().gold, more_gold + gold);
         let negative_gold = 100;
         let _record = SurrealProducer::patch_user_gold(negative_gold, user_id, true).await;
         let items_fetch = SurrealConsumer::get_items(user_id).await.unwrap();
         assert_eq!(
             items_fetch.unwrap().gold,
-            (more_gold + gold - negative_gold) as u64
+            (more_gold + gold - negative_gold)
         );
     }
 
@@ -256,10 +258,15 @@ mod test {
     async fn delete_related_enemies() {
         SurrealDB::connect("memory").await.unwrap();
         let user_id = 442792120336777217;
-        let mut character = Character::default();
-        character.user_id = user_id;
-        let mut other_character = Character::default();
-        other_character.user_id = 123456789;
+        let character = Character {
+            user_id,
+            ..Default::default()
+        };
+        let other_character = Character {
+            user_id: 123456789,
+            ..Default::default()
+        };
+
         let mut enemy = Enemy::default();
         let mut other_enemy = Enemy::default();
         other_enemy.gold = 999;
@@ -285,26 +292,29 @@ mod test {
             .await
             .unwrap();
 
-        assert_eq!(enemy_records.is_some(), true);
+        assert!(enemy_records.is_some());
 
-        let _ = SurrealProducer::delete_related(user_id).await.unwrap();
+        SurrealProducer::delete_related(user_id).await.unwrap();
         let enemy_records = SurrealConsumer::get_related_enemies(&character)
             .await
             .unwrap();
-        assert_eq!(enemy_records.is_none(), true);
+        assert!(enemy_records.is_none());
 
         let other_enemy_records = SurrealConsumer::get_related_enemies(&other_character)
             .await
             .unwrap();
-        assert_eq!(other_enemy_records.is_some(), true);
+        assert!(other_enemy_records.is_some());
     }
     #[ignore]
     #[tokio::test]
     async fn store_enemy_relation_to_user() {
         SurrealDB::connect("memory").await.unwrap();
         let user_id = 442792120336777217;
-        let mut character = Character::default();
-        character.user_id = user_id;
+        let character = Character {
+            user_id,
+            ..Default::default()
+        };
+
         let mut enemy = Enemy::default();
         enemy.gold = 333;
         SurrealProducer::create_character(character.clone())
@@ -317,7 +327,7 @@ mod test {
         let enemy_records = SurrealConsumer::get_related_enemies(&character)
             .await
             .unwrap();
-        assert_eq!(enemy_records.is_some(), true);
+        assert!(enemy_records.is_some());
         assert_eq!(enemy_records.unwrap().0.gold, 333);
         let mut new_enemy = Enemy::default();
         new_enemy.gold = 444;
@@ -327,15 +337,17 @@ mod test {
         let enemy_records = SurrealConsumer::get_related_enemies(&character)
             .await
             .unwrap();
-        assert_eq!(enemy_records.is_some(), true);
+        assert!(enemy_records.is_some());
     }
     #[ignore]
     #[tokio::test]
     async fn mutate_enemies() {
         SurrealDB::connect("memory").await.unwrap();
         let user_id = 442792120336777217;
-        let mut character = Character::default();
-        character.user_id = user_id;
+        let character = Character {
+            user_id,
+            ..Default::default()
+        };
         let mut enemy = Enemy::default();
         enemy.gold = 333;
         SurrealProducer::create_character(character.clone())
@@ -359,6 +371,6 @@ mod test {
             .await
             .unwrap();
         println!("enemies: {:?}", enemies);
-        assert_eq!(enemies.is_none(), true);
+        assert!(enemies.is_none());
     }
 }

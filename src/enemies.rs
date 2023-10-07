@@ -39,8 +39,7 @@ impl Enemy {
     fn linear_scaling(level: u32) -> u32 {
         let mut rng = rand::thread_rng();
         let ranges = level..(level * 50);
-        let exp = rng.gen_range(ranges);
-        exp
+        rng.gen_range(ranges)
     }
 
     fn hp_gain(attributes: &Attributes, level: u32) -> u32 {
@@ -53,12 +52,12 @@ impl Enemy {
     pub fn weak(mob: Mob, level: u32) -> Enemy {
         let attributes: Attributes = (&mob).into();
         Enemy {
-            kind: mob.clone(),
+            kind: mob,
             level,
             experience: Enemy::linear_scaling(level),
             health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: Dice::new(vec![Die::D8.into(); 3].into()),
-            resistance: Dice::new(vec![Die::D8.into(); 3].into()),
+            defense: Dice::new(vec![Die::D8.into(); 3]),
+            resistance: Dice::new(vec![Die::D8.into(); 3]),
             gold: sub_linear_scaling(level) as u64,
             attributes,
             items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
@@ -70,12 +69,12 @@ impl Enemy {
     pub fn normal(mob: Mob, level: u32) -> Enemy {
         let attributes: Attributes = (&mob).into();
         Enemy {
-            kind: mob.clone(),
+            kind: mob,
             level,
             experience: Enemy::linear_scaling(level * 2),
             health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: Dice::new(vec![Die::D8.into(); 5].into()),
-            resistance: Dice::new(vec![Die::D8.into(); 5].into()),
+            defense: Dice::new(vec![Die::D8.into(); 5]),
+            resistance: Dice::new(vec![Die::D8.into(); 5]),
             gold: sub_linear_scaling(level * 2) as u64,
             attributes,
             items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
@@ -87,12 +86,12 @@ impl Enemy {
     pub fn strong(mob: Mob, level: u32) -> Enemy {
         let attributes: Attributes = (&mob).into();
         Enemy {
-            kind: mob.clone(),
+            kind: mob,
             level,
             experience: Enemy::linear_scaling(level * 5),
             health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: Dice::new(vec![Die::D8.into(); 8].into()),
-            resistance: Dice::new(vec![Die::D8.into(); 8].into()),
+            defense: Dice::new(vec![Die::D8.into(); 8]),
+            resistance: Dice::new(vec![Die::D8.into(); 8]),
             gold: sub_linear_scaling(level * 5) as u64,
             attributes: (&mob).into(),
             items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
@@ -106,12 +105,12 @@ impl Enemy {
             .log_scaling(level)
             .clone();
         Enemy {
-            kind: mob.clone(),
+            kind: mob,
             level,
             experience: Enemy::linear_scaling(level * 10),
             health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: Dice::new(vec![Die::D8.into(); 17].into()),
-            resistance: Dice::new(vec![Die::D8.into(); 17].into()),
+            defense: Dice::new(vec![Die::D8.into(); 17]),
+            resistance: Dice::new(vec![Die::D8.into(); 17]),
             gold: sub_linear_scaling(level * 100) as u64,
             attributes,
             items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
@@ -130,7 +129,7 @@ impl Enemy {
     pub fn action(&self) -> (ActionDice, MobAction) {
         let mut rng = thread_rng();
         let action = self.actions.choose(&mut rng).expect("No Skill found");
-        (action.act(&self), action.clone())
+        (action.act(self), action.clone())
     }
 
     pub fn set_actions(mut self, actions: Vec<MobAction>) -> Enemy {
@@ -256,7 +255,7 @@ pub enum Mob {
 
 impl Mob {
     pub fn generate(&self, character: &Character) -> Enemy {
-        let enemy: Enemy = self.grade().to_enemy(self.clone(), character.level);
+        let enemy: Enemy = self.grade().to_enemy(*self, character.level);
         enemy
     }
 }

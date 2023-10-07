@@ -17,7 +17,6 @@ use serenity::model::id::{ChannelId, GuildId};
 use tokio::time::sleep;
 
 use tracing::{debug, info};
-use tracing_subscriber;
 
 use carrion_eris::battle::all_battle;
 use tracing_subscriber::layer::SubscriberExt;
@@ -40,7 +39,7 @@ impl serenity::EventHandler for Handler {
                 let channel_id = 1152198475925176401;
 
                 let mut menu = String::from("```\n");
-                if results.results.len() == 0 {
+                if results.results.is_empty() {
                     continue;
                 }
                 menu.push_str("Battle Results:\n");

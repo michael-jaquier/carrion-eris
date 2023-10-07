@@ -161,8 +161,7 @@ pub fn eris_valid_enum(ast: &DeriveInput) -> TokenStream2 {
         impl crate::ValidEnum for #name {
             fn valid() -> String {
                 use #name::*;
-                let _vec = vec![#(#ee),*];
-                _vec.iter().map(|x| x.to_string()).collect::<Vec<_>>().join("\n")
+                [#(#ee),*].iter().map(|x| x.to_string()).collect::<Vec<_>>().join("\n")
 
             }
         }
@@ -185,13 +184,12 @@ pub fn eris_valid_try(ast: &DeriveInput) -> TokenStream2 {
     }
 
     let q = quote! {
-
         impl std::convert::TryFrom<String> for #name {
            type Error = String;
             fn try_from(value: String) -> Result<Self, Self::Error> {
                 use #name::*;
                 use heck::ToSnakeCase;
-                let d = vec![#(#ee),*];
+                let d = [#(#ee),*];
                 let d_strings = d.iter().map(|x| x.to_string().to_snake_case()).collect::<Vec<String>>();
                 let index = d_strings.iter().position(|x| x == &value.to_snake_case());
                 match index {

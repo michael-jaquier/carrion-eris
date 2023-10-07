@@ -10,19 +10,18 @@
 
 # Zones & Areas
 * Let users chance "zone" with different mobs & maybe mob levels
+* Dungeons with bosses unique loot only drops here need to finish the fight (10-20 mobs) or no loot big gold cost
 
 # Items
-* Allow items to be equipped need a /slash command that accepts an item name or id
-** In the short term we can just equip the best item in a slot
-* Have enemies drop items
-* Need a /slash command to list users items 
 * Maybe a shop where you can gamble for items using gold
 * Trading items between players
-* Make items impact the combat probably at the `AttackModifier` and `DefenseModifier` level
 
 # Mobs
 * More mob variety
 
 
 # Combat
+* Add healing "attacks" to players would need to allow players to choose multiple attacks to cycle through
 
+# BugFix
+* Equipping items during a battle while erase them when we update the character

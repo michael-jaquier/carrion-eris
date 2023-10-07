@@ -1,0 +1,16 @@
+name: Prismari Primer
+description: A magical tome filled with intricate diagrams and colorful illustrations. It grants the reader a deeper understanding of arcane arts.
+slot: WondrousItem
+armor: null
+resistance: null
+damage: null
+attribute_bonus:
+  strength: 0
+  dexterity: 0
+  constitution: 0
+  intelligence: 5
+  wisdom: 0
+  charisma: 0
+action: 0
+rarity: Rare
+value: 75

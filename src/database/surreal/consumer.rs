@@ -1,4 +1,4 @@
-use crate::database::surreal::{CHARACTER_TABLE, DB, ENEMY_TABLE, ITEM_TABLE};
+use crate::database::surreal::{CHARACTER_TABLE, COMBAT_TABLE, DB, ENEMY_TABLE, ITEM_TABLE};
 use crate::enemies::Enemy;
 use crate::items::Items;
 use crate::player::{Character, SkillSet};
@@ -27,27 +27,23 @@ impl SurrealConsumer {
         Ok(record)
     }
 
-    pub async fn get_related_enemies(character: &Character) -> CarrionResult<Vec<(Enemy, Thing)>> {
+    pub async fn get_related_enemies(
+        character: &Character,
+    ) -> CarrionResult<Option<(Enemy, Thing)>> {
         let sql = format!(
-            "select * from {} where select ->fighting->{} from {}:{} explain;",
-            ENEMY_TABLE, ENEMY_TABLE, CHARACTER_TABLE, character.user_id
+            "select id from (select id, count(->{}->{}) as fight, array::pop(->{}->{}.user_id) as user_id from {}) where user_id={} limit 1",
+            COMBAT_TABLE, CHARACTER_TABLE, COMBAT_TABLE,CHARACTER_TABLE,ENEMY_TABLE, character.user_id
         );
+
         let mut record: Response = DB.query(sql).await?;
-
-        let enemies: Vec<Enemy> = record.take(0).unwrap();
-
-        let sql = format!(
-            "select id from {} where select ->fighting->{} from {}:{} explain;",
-            ENEMY_TABLE, ENEMY_TABLE, CHARACTER_TABLE, character.user_id
-        );
-        let mut record: Response = DB.query(sql).await?;
-        let ids: Vec<Record> = record.take(0).unwrap();
-
-        let mut enemies_with_ids: Vec<(Enemy, Thing)> = vec![];
-        for (enemy, id) in enemies.into_iter().zip(ids.into_iter()) {
-            enemies_with_ids.push((enemy, id.id.clone()));
+        let enemy_records: Option<Record> = record.take(0)?;
+        if let Some(record) = enemy_records {
+            let enemy: Option<Enemy> = DB.select(record.id.clone()).await?;
+            let true_enemy_records = (enemy.expect("No matching record"), record.id.clone());
+            Ok(Option::from(true_enemy_records))
+        } else {
+            Ok(None)
         }
-        Ok(enemies_with_ids)
     }
 
     pub async fn get_skill(

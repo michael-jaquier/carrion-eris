@@ -35,8 +35,7 @@ impl serenity::EventHandler for Handler {
         let ctx_clone = ctx.clone();
         tokio::spawn(async move {
             loop {
-                SurrealDB::export("eris.db").await;
-                sleep(Duration::from_secs(10)).await;
+                sleep(Duration::from_secs(5)).await;
                 let results = all_battle().await;
                 let channel_id = 1152198475925176401;
 
@@ -55,6 +54,7 @@ impl serenity::EventHandler for Handler {
                 if let Err(why) = m {
                     eprintln!("Error sending message: {:?}", why);
                 };
+                SurrealDB::export("eris.db").await;
             }
         });
     }
@@ -111,6 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             commands::me(),
             commands::skill(),
             commands::battle(),
+            commands::items(),
+            commands::sell(),
+            commands::equip(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),

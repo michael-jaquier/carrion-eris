@@ -1,9 +1,11 @@
 pub mod battle;
 pub mod classes;
 pub mod commands;
+pub mod constructed;
 pub mod database;
 pub mod dice;
 pub mod enemies;
+pub mod item_templates;
 pub mod items;
 pub mod mutators;
 pub mod player;
@@ -18,6 +20,7 @@ type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, State, Error>;
 
 use serde::{Deserialize, Serialize};
+use std::f64::consts::E;
 
 use surrealdb::sql::Thing;
 use thiserror::Error;
@@ -28,6 +31,8 @@ use crate::enemies::Enemy;
 use crate::player::Character;
 
 use std::fmt::{Display, Formatter};
+
+use crate::constructed::ItemsWeHave;
 
 #[derive(Error, Debug)]
 pub enum CarrionError {
@@ -53,6 +58,8 @@ pub struct BattleInfo {
     pub enemy_action: String,
     pub damage_dealt: i32,
     pub damage_taken: i32,
+    pub healing_done: i32,
+    pub healing_taken: i32,
     pub player_name: String,
     pub monster_name: String,
     pub kill: bool,
@@ -64,6 +71,7 @@ pub struct BattleInfo {
     pub experience_gained: u32,
     pub skill_experience_gained: u32,
     pub gold_gained: u64,
+    pub item_gained: Vec<ItemsWeHave>,
 }
 
 impl BattleInfo {
@@ -73,6 +81,8 @@ impl BattleInfo {
             enemy_action: "".to_string(),
             damage_dealt: 0,
             damage_taken: 0,
+            healing_done: 0,
+            healing_taken: 0,
             player_name: character.name.clone(),
             monster_name: enemy.kind.to_string(),
             kill: false,
@@ -84,6 +94,7 @@ impl BattleInfo {
             experience_gained: 0,
             skill_experience_gained: 0,
             gold_gained: 0,
+            item_gained: vec![],
         }
     }
 }
@@ -103,6 +114,13 @@ impl Display for BattleInfo {
         string.push_str(&self.damage_dealt.to_string());
         string.push_str(" damage!");
         string.push_str("\t🎲");
+        string.push_str("\n\t");
+
+        string.push_str("🪨\t");
+        string.push_str("Next level in ");
+        string.push_str(&self.next_level.to_string());
+        string.push_str(" experience!");
+        string.push_str("\t🪨");
 
         if self.damage_taken > 0 {
             string.push_str("\n\t");
@@ -116,6 +134,29 @@ impl Display for BattleInfo {
             string.push_str(&self.damage_taken.to_string());
             string.push_str(" damage!");
             string.push_str("\t🎲");
+        }
+
+        if self.healing_taken > 0 {
+            string.push_str("\n\t");
+            string.push_str("🎲\t");
+            string.push_str(&self.monster_name);
+            string.push_str(" healed ");
+            string.push_str(&self.monster_name);
+            string.push_str(" with ");
+            string.push_str(&self.enemy_action.to_string());
+            string.push_str(" regenerating ");
+            string.push_str(&self.healing_taken.to_string());
+            string.push_str(" health!");
+            string.push_str("\t🎲");
+        }
+
+        if self.experience_gained > 0 {
+            string.push_str("\n\t");
+            string.push_str("💠\t");
+            string.push_str("Gained ");
+            string.push_str(&self.experience_gained.to_string());
+            string.push_str(" experience!");
+            string.push_str("\t💠");
         }
 
         if self.critical {
@@ -136,11 +177,20 @@ impl Display for BattleInfo {
             string.push_str("Leveled up!");
             string.push_str("\t🎉")
         }
+
         if self.traits_available > 0 {
             string.push_str("\n\t");
             string.push_str("⭐\t");
             string.push_str("Trait available!");
             string.push_str("\t⭐")
+        }
+
+        if !self.item_gained.is_empty() {
+            for item in &self.item_gained {
+                string.push_str(
+                    format!("\n\t🎁\t Item gained: {}\t🎁", &item.generate().name).as_str(),
+                );
+            }
         }
         string.push_str("\n🗡️\n");
         write!(f, "{}", string)
@@ -155,11 +205,14 @@ trait ElementalScaling {
     fn scaling(&self) -> Option<crate::units::DamageType>;
 }
 
-pub fn log_power_scale(n: u32, power: Option<f64>) -> u32 {
-    let default_scale = |n: u32| ((n as f64).ln().powf(power.unwrap_or(1.1))) as u32;
+pub fn log_power_scale(n: i32, power: Option<f64>) -> u32 {
+    let default_scale = |n: i32| ((n as f64).ln().powf(power.unwrap_or(1.1))) as u32;
     default_scale(n)
 }
 
+pub fn sub_linear_scaling(n: u32) -> u32 {
+    (n as f64 / ((n as f64).sqrt())) as u32
+}
 pub fn log_power_power_scale(n: u32) -> u32 {
     let default_scale = |n: u32| ((n as f64).powf(n as f64).ln() * n as f64) as u32;
     default_scale(n * n)
@@ -171,6 +224,11 @@ pub fn ln_power_power_power_scale(n: u32) -> u32 {
     default_scale(n) as u32
 }
 
+pub fn exp_scaling(n: u32) -> u64 {
+    let ee = n as f64;
+    let exp = ((ee.ln() + 1.0).ln()).min(1.0);
+    ee.powf(E * exp) as u64
+}
 trait ValidEnum {
     fn valid() -> String;
 }

@@ -2,6 +2,7 @@ use crate::dice::{AdvantageState, Die, DieObject};
 use crate::units::Alignment;
 use crate::units::Attributes;
 use crate::CarrionError;
+use eris_macro::ErisValidEnum;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::fmt::{Display, Formatter};
@@ -15,7 +16,7 @@ pub enum TraitMutation {
     Advantage,
     Disadvantage,
 
-    Repeat(usize),
+    ActionBonus(u32),
     // Alignment bonus is just damage or something related to more dice
     AlignmentBonus(Alignment, Vec<DieObject>),
 
@@ -29,6 +30,7 @@ pub struct TraitMutations {
     dodge: Vec<TraitMutation>,
     suppress: Vec<TraitMutation>,
     armor: Vec<TraitMutation>,
+    actions: Vec<TraitMutation>,
 }
 
 impl Display for TraitMutation {
@@ -41,7 +43,7 @@ impl Display for TraitMutation {
             }
             TraitMutation::Advantage => write!(f, "Advantage"),
             TraitMutation::Disadvantage => write!(f, "Disadvantage"),
-            TraitMutation::Repeat(times) => write!(f, "Repeat({})", times),
+            TraitMutation::ActionBonus(times) => write!(f, "Action Bonus({})", times),
             TraitMutation::AlignmentBonus(alignment, mutation) => {
                 write!(f, "AlignmentBonus({:?}, {:?})", alignment, mutation)
             }
@@ -59,7 +61,7 @@ impl TraitMutations {
         for m in mutations {
             match m {
                 TraitMutation::MultiplicativeBonus(e) => {
-                    multi += e;
+                    multi *= e;
                 }
                 _ => {}
             }
@@ -116,6 +118,23 @@ impl TraitMutations {
     pub fn set_magic_attack(&mut self, tr: TraitMutation) {
         self.magic_attack.push(tr)
     }
+
+    fn set_actions(&mut self, tr: TraitMutation) {
+        self.actions.push(tr)
+    }
+
+    pub fn action_points(&self) -> u32 {
+        let mut action_points = 0;
+        for tr in &self.actions {
+            match tr {
+                TraitMutation::ActionBonus(times) => {
+                    action_points += times;
+                }
+                _ => {}
+            }
+        }
+        action_points
+    }
     fn dodge_check(&self, tr: &TraitMutation) -> bool {
         let dice_check =
             |dice: &Vec<DieObject>| dice.iter().map(|d| d.get_sides() == 20).all(|d| d);
@@ -133,7 +152,7 @@ impl TraitMutations {
                     return false;
                 }
             }
-            TraitMutation::Repeat(_) => {
+            TraitMutation::ActionBonus(_) => {
                 warn!("Invalid Mutation for dodge {}. Skipping", tr);
                 return false;
             }
@@ -199,11 +218,12 @@ impl Default for TraitMutations {
             armor: vec![],
             physical_attack: vec![],
             suppress: vec![],
+            actions: vec![],
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash, ErisValidEnum)]
 pub enum CharacterTraits {
     Robust,
     Nimble,
@@ -219,6 +239,7 @@ pub enum CharacterTraits {
     Righteous,
     Greedy,
     Keen,
+    Energetic,
 }
 
 impl Display for CharacterTraits {
@@ -238,6 +259,7 @@ impl Display for CharacterTraits {
             CharacterTraits::Righteous => write!(f, "Righteous"),
             CharacterTraits::Greedy => write!(f, "Greedy"),
             CharacterTraits::Keen => write!(f, "Keen"),
+            CharacterTraits::Energetic => write!(f, "Energetic"),
         }
     }
 }
@@ -278,6 +300,7 @@ impl CharacterTraits {
             CharacterTraits::Righteous => {}
             CharacterTraits::Greedy => {}
             CharacterTraits::Keen => {}
+            CharacterTraits::Energetic => {}
         }
     }
 
@@ -287,7 +310,7 @@ impl CharacterTraits {
             match tr {
                 CharacterTraits::Robust => {
                     trait_mutations.set_armor(TraitMutation::MultiplicativeBonus(1.1));
-                    trait_mutations.set_armor(TraitMutation::FlatIncrease(vec![Die::D4.into(); 1]))
+                    trait_mutations.set_armor(TraitMutation::FlatIncrease(vec![Die::D4.into(); 5]))
                 }
                 CharacterTraits::Nimble => {
                     trait_mutations.set_dodge(TraitMutation::Advantage);
@@ -373,33 +396,13 @@ impl CharacterTraits {
                     trait_mutations.set_magic_attack(TraitMutation::CriticalAdvantage);
                     trait_mutations.set_physical_attack(TraitMutation::CriticalAdvantage);
                 }
+                CharacterTraits::Energetic => {
+                    trait_mutations.set_actions(TraitMutation::ActionBonus(1));
+                }
             }
         }
 
         trait_mutations
-    }
-
-    pub fn valid_traits() -> String {
-        let all = vec![
-            CharacterTraits::Robust,
-            CharacterTraits::Nimble,
-            CharacterTraits::Genius,
-            CharacterTraits::Lucky,
-            CharacterTraits::FolkHero,
-            CharacterTraits::Charismatic,
-            CharacterTraits::Strong,
-            CharacterTraits::Hermit,
-            CharacterTraits::Addict,
-            CharacterTraits::Cursed,
-            CharacterTraits::Unlucky,
-            CharacterTraits::Righteous,
-            CharacterTraits::Greedy,
-            CharacterTraits::Keen,
-        ];
-        all.iter()
-            .map(|t| t.to_string())
-            .collect::<Vec<String>>()
-            .join("\n ")
     }
 }
 
@@ -422,6 +425,7 @@ impl TryFrom<String> for CharacterTraits {
             "righteous" => Ok(CharacterTraits::Righteous),
             "greedy" => Ok(CharacterTraits::Greedy),
             "keen" => Ok(CharacterTraits::Keen),
+            "energetic" => Ok(CharacterTraits::Energetic),
             _ => Err(CarrionError::ParseError(
                 "Unable to parse character trait".to_string(),
             )),

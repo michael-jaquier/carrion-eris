@@ -1,12 +1,8 @@
 
 # Skills 
-* Change skills by /slash command
-* Have skills that can gain experience based on usage
 
 # Code
-* ~Put code in a separate files based on functionality~
 * Ensure all calls to the db are localized to a single file/abstracted to a certain extent
-* Have player and enemy actions take a `BattleInfo` and handle summation of the battle themselves
 
 # Traits
 * Traits that interact with things like hp ( vampire etc. )
@@ -26,7 +22,7 @@
 
 # Mobs
 * More mob variety
-* ~Give mobs a defensive struct to make use of their resistances~
+
 
 # Combat
-* Create a /slash command to let a user select a mob to fight this should probably cost some resource
+

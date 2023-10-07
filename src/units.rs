@@ -1,9 +1,11 @@
 use crate::classes::Classes;
 use crate::enemies::Mob;
+use std::collections::HashMap;
 
+use crate::dice::{Dice, Die};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
-use std::ops::{Add, Deref, Sub};
+use std::ops::{Add, AddAssign, Deref, Sub};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Attributes {
@@ -13,6 +15,17 @@ pub struct Attributes {
     pub(crate) constitution: Attribute,
     pub(crate) wisdom: Attribute,
     pub(crate) charisma: Attribute,
+}
+
+impl AddAssign for Attributes {
+    fn add_assign(&mut self, rhs: Self) {
+        self.strength += rhs.strength;
+        self.intelligence += rhs.intelligence;
+        self.dexterity += rhs.dexterity;
+        self.constitution += rhs.constitution;
+        self.wisdom += rhs.wisdom;
+        self.charisma += rhs.charisma;
+    }
 }
 
 impl Display for Attributes {
@@ -31,8 +44,19 @@ impl Display for Attributes {
 }
 
 impl Attributes {
+    pub(crate) fn zero() -> Self {
+        Self {
+            strength: Attribute::Strength(0),
+            intelligence: Attribute::Intelligence(0),
+            dexterity: Attribute::Dexterity(0),
+            constitution: Attribute::Constitution(0),
+            wisdom: Attribute::Wisdom(0),
+            charisma: Attribute::Charisma(0),
+        }
+    }
     pub fn log_scaling(&mut self, level: u32) -> &mut Attributes {
-        let default_scale = |n: u32| ((n as f64).ln().powf(1.1)).floor() as u32;
+        let level = level as i32;
+        let default_scale = |n: i32| ((n as f64).ln().powf(1.1)).floor() as i32;
         self.constitution.plus(default_scale(level));
         self.strength.plus(default_scale(level));
         self.intelligence.plus(default_scale(level));
@@ -42,7 +66,7 @@ impl Attributes {
         self
     }
 
-    pub fn get(&self, attr: &Attribute) -> u32 {
+    pub fn get(&self, attr: &Attribute) -> i32 {
         match attr {
             Attribute::Strength(_) => self.strength.inner(),
             Attribute::Intelligence(_) => self.intelligence.inner(),
@@ -71,6 +95,11 @@ impl From<&Classes> for Attributes {
                 ca.charisma = Attribute::Charisma(17);
                 ca.intelligence = Attribute::Intelligence(15);
             }
+            Classes::Paladin => {
+                ca.strength = Attribute::Strength(15);
+                ca.constitution = Attribute::Constitution(17);
+                ca.charisma = Attribute::Charisma(22);
+            }
         }
         ca
     }
@@ -97,11 +126,7 @@ impl From<&Mob> for Attributes {
                 ca.strength = Attribute::Strength(22);
                 ca.constitution = Attribute::Constitution(22);
             }
-            _ => {
-                ca.dexterity = Attribute::Dexterity(22);
-                ca.constitution = Attribute::Constitution(15);
-                ca.charisma = Attribute::Charisma(20);
-            }
+            _ => {}
         }
         ca
     }
@@ -137,12 +162,25 @@ impl Sub for Attributes {
 
 #[derive(Debug, Deserialize, Serialize, Copy, Clone, PartialOrd, PartialEq)]
 pub enum Attribute {
-    Strength(u32),
-    Intelligence(u32),
-    Dexterity(u32),
-    Constitution(u32),
-    Wisdom(u32),
-    Charisma(u32),
+    Strength(i32),
+    Intelligence(i32),
+    Dexterity(i32),
+    Constitution(i32),
+    Wisdom(i32),
+    Charisma(i32),
+}
+
+impl AddAssign for Attribute {
+    fn add_assign(&mut self, rhs: Self) {
+        match self {
+            Attribute::Strength(v) => *v += rhs.inner(),
+            Attribute::Intelligence(v) => *v += rhs.inner(),
+            Attribute::Dexterity(v) => *v += rhs.inner(),
+            Attribute::Constitution(v) => *v += rhs.inner(),
+            Attribute::Wisdom(v) => *v += rhs.inner(),
+            Attribute::Charisma(v) => *v += rhs.inner(),
+        }
+    }
 }
 
 impl From<&str> for Attribute {
@@ -179,7 +217,7 @@ impl Attribute {
     pub fn absolute_difference(&self, other: &Self) -> i32 {
         **self as i32 - **other as i32
     }
-    pub fn plus(&mut self, other: u32) {
+    pub fn plus(&mut self, other: i32) {
         match self {
             Attribute::Strength(v) => *v += other,
             Attribute::Intelligence(v) => *v += other,
@@ -190,7 +228,7 @@ impl Attribute {
         }
     }
 
-    pub fn minus(&mut self, other: u32) {
+    pub fn minus(&mut self, other: i32) {
         match self {
             Attribute::Strength(v) => (*v).checked_sub(other).unwrap_or(0),
             Attribute::Intelligence(v) => (*v).checked_sub(other).unwrap_or(0),
@@ -201,7 +239,7 @@ impl Attribute {
         };
     }
 
-    pub fn inner(&self) -> u32 {
+    pub fn inner(&self) -> i32 {
         match self {
             Attribute::Strength(v) => *v,
             Attribute::Intelligence(v) => *v,
@@ -214,7 +252,7 @@ impl Attribute {
 }
 
 impl Deref for Attribute {
-    type Target = u32;
+    type Target = i32;
 
     fn deref(&self) -> &Self::Target {
         match self {
@@ -277,6 +315,53 @@ pub enum DamageType {
     Despair,
     Existential,
     Boss,
+    Prismatic,
+    Healing,
+}
+
+impl DamageType {
+    pub fn damage_type_hash_map() -> HashMap<DamageType, Dice> {
+        let mut hash = HashMap::new();
+        hash.insert(DamageType::Fire, Dice::zero());
+        hash.insert(DamageType::Water, Dice::zero());
+        hash.insert(DamageType::Earth, Dice::zero());
+        hash.insert(DamageType::Air, Dice::zero());
+        hash.insert(DamageType::Light, Dice::zero());
+        hash.insert(DamageType::Dark, Dice::zero());
+        hash.insert(DamageType::Iron, Dice::zero());
+        hash.insert(DamageType::Arcane, Dice::zero());
+        hash.insert(DamageType::Holy, Dice::zero());
+        hash.insert(DamageType::NonElemental, Dice::zero());
+        hash.insert(DamageType::Physical, Dice::zero());
+        hash.insert(DamageType::Hope, Dice::zero());
+        hash.insert(DamageType::Despair, Dice::zero());
+        hash.insert(DamageType::Existential, Dice::zero());
+        hash.insert(DamageType::Boss, Dice::zero());
+        hash.insert(DamageType::Prismatic, Dice::zero());
+        hash.insert(DamageType::Healing, Dice::zero());
+        hash
+    }
+    pub fn damage_type_hash_map_die() -> HashMap<DamageType, (Die, usize)> {
+        let mut hash = HashMap::new();
+        hash.insert(DamageType::Fire, (Die::D4, 0));
+        hash.insert(DamageType::Water, (Die::D4, 0));
+        hash.insert(DamageType::Earth, (Die::D4, 0));
+        hash.insert(DamageType::Air, (Die::D4, 0));
+        hash.insert(DamageType::Light, (Die::D4, 0));
+        hash.insert(DamageType::Dark, (Die::D4, 0));
+        hash.insert(DamageType::Iron, (Die::D4, 0));
+        hash.insert(DamageType::Arcane, (Die::D4, 0));
+        hash.insert(DamageType::Holy, (Die::D4, 0));
+        hash.insert(DamageType::NonElemental, (Die::D4, 0));
+        hash.insert(DamageType::Physical, (Die::D4, 0));
+        hash.insert(DamageType::Hope, (Die::D4, 0));
+        hash.insert(DamageType::Despair, (Die::D4, 0));
+        hash.insert(DamageType::Existential, (Die::D4, 0));
+        hash.insert(DamageType::Boss, (Die::D4, 0));
+        hash.insert(DamageType::Prismatic, (Die::D4, 0));
+        hash.insert(DamageType::Healing, (Die::D4, 0));
+        hash
+    }
 }
 
 impl From<&str> for DamageType {
@@ -297,6 +382,8 @@ impl From<&str> for DamageType {
             "despair" => DamageType::Despair,
             "existential" => DamageType::Existential,
             "boss" => DamageType::Boss,
+            "prismatic" => DamageType::Prismatic,
+            "healing" => DamageType::Healing,
             _ => panic!("Invalid damage type"),
         }
     }

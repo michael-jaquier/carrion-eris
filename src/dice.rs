@@ -1,5 +1,6 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::ops::{Add, AddAssign};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct DieObject {
@@ -92,6 +93,36 @@ pub enum Die {
     D100,
 }
 
+impl From<&str> for Die {
+    fn from(value: &str) -> Self {
+        match value.to_lowercase().as_str() {
+            "d4" => Die::D4,
+            "d6" => Die::D6,
+            "d8" => Die::D8,
+            "d10" => Die::D10,
+            "d12" => Die::D12,
+            "d20" => Die::D20,
+            "d100" => Die::D100,
+            _ => panic!("Invalid die type {}", value),
+        }
+    }
+}
+
+impl From<String> for Die {
+    fn from(value: String) -> Self {
+        match value.to_lowercase().as_str() {
+            "d4" => Die::D4,
+            "d6" => Die::D6,
+            "d8" => Die::D8,
+            "d10" => Die::D10,
+            "d12" => Die::D12,
+            "d20" => Die::D20,
+            "d100" => Die::D100,
+            _ => panic!("Invalid die type {}", value),
+        }
+    }
+}
+
 impl Die {
     fn sides(&self) -> u32 {
         match self {
@@ -118,6 +149,10 @@ impl Die {
             return std::cmp::min(roll1, roll2);
         }
         rng.gen_range(ranges)
+    }
+
+    pub fn n_die(die: Die, n: usize) -> (Die, usize) {
+        (die, n)
     }
 }
 
@@ -179,6 +214,14 @@ impl Dice {
     pub fn new(dice: Vec<DieObject>) -> Self {
         Self { dice }
     }
+
+    pub fn zero() -> Self {
+        Self::new(vec![])
+    }
+
+    pub fn new_from(d: Die, n: usize) -> Dice {
+        Self::new(vec![DieObject::new(d); n])
+    }
     pub fn empty() -> Self {
         Self { dice: vec![] }
     }
@@ -205,6 +248,10 @@ impl Dice {
 
     pub fn add_die(&mut self, die: Vec<DieObject>) {
         self.dice.extend(die);
+    }
+
+    pub fn add_dice(&mut self, dice: Dice) {
+        self.dice.extend(dice.dice);
     }
 
     pub fn advantage(&mut self) -> &mut Dice {
@@ -249,6 +296,22 @@ impl Dice {
         self.dice.iter_mut().for_each(|d| {
             d.set_critical_advantage(advantage);
         });
+    }
+}
+
+impl Add for Dice {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut dice = self.dice;
+        dice.extend(rhs.dice);
+        Self::new(dice)
+    }
+}
+
+impl AddAssign for Dice {
+    fn add_assign(&mut self, rhs: Self) {
+        self.dice.extend(rhs.dice);
     }
 }
 

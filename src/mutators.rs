@@ -5,7 +5,7 @@ use std::ops::Div;
 
 use crate::dice::{AdvantageState, Dice, Die, DieObject};
 use crate::skills::Skill;
-use crate::EnemyEvents;
+use crate::{ElementalScaling, EnemyEvents};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 #[derive(Clone, PartialEq, Serialize, Deserialize)]
@@ -129,6 +129,11 @@ impl AttackModifiers {
             if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
                 dmg += dmg * dice.roll() as f64 / 5.0;
             }
+            if let Some(element) = self.skill.skill.scaling() {
+                self.player.equipment.damage().get(&element).map(|x| {
+                    dmg += x.roll() as f64;
+                });
+            }
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
@@ -144,6 +149,12 @@ impl AttackModifiers {
             if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
                 dmg += dmg * dice.roll() as f64 / 5.0;
             }
+            if let Some(element) = self.skill.skill.scaling() {
+                self.player.equipment.damage().get(&element).map(|x| {
+                    dmg += x.roll() as f64;
+                });
+            }
+
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
@@ -221,7 +232,17 @@ impl DefenseModifiers {
         let multi = TraitMutations::multi(&mutations);
         let map_rolls = |x: u32| (x as f64 * multi);
 
-        let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).roll());
+        let base = (self.character.class.armor_scaling()
+            * ((self.character.attributes.constitution.inner()
+                + self.character.attributes.strength.inner()) as f64
+                / 2_f64))
+            .floor() as usize;
+
+        let mut rolls = map_rolls(
+            Dice::new(vec![Die::D4.into(); base.max(1)])
+                .set_advantage(advantage.into())
+                .roll(),
+        );
         for tr in mutations {
             match tr {
                 TraitMutation::FlatIncrease(e) => {

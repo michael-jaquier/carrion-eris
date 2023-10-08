@@ -1,12 +1,14 @@
 use crate::enemies::{Enemy, EnemyState};
-use crate::{ln_power_power_power_scale, log_power_scale, BattleInfo};
+use crate::{
+    exp_scaling, ln_power_power_power_scale, log_power_scale, BattleInfo, ElementalScaling,
+};
 
 use serde::{Deserialize, Serialize};
 
 use crate::classes::Classes;
 use crate::mutators::{AttackModifiers, DefenseModifiers};
 use crate::traits::{CharacterTraits, TraitMutations};
-use crate::units::Attributes;
+use crate::units::{Attributes, DamageType};
 use std::collections::HashSet;
 
 use rand::{thread_rng, Rng};
@@ -23,19 +25,10 @@ pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
 pub type PhysicalDice = Option<Dice>;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ActionDice {
     pub physical: Option<Dice>,
     pub magical: Option<Dice>,
-}
-
-impl Default for ActionDice {
-    fn default() -> Self {
-        Self {
-            physical: None,
-            magical: None,
-        }
-    }
 }
 
 impl ActionDice {
@@ -118,11 +111,11 @@ impl Display for SkillSet {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut string = String::new();
         string.push_str("```");
-        string.push_str("\n");
+        string.push('\n');
         string.push_str(&format!("Skill: {}\n", self.skill));
         string.push_str(&format!("Level: {}\n", self.level));
         string.push_str(&format!("Experience: {}\n", self.experience));
-        string.push_str("\n");
+        string.push('\n');
         string.push_str("```");
         write!(f, "{}", string)
     }
@@ -149,25 +142,27 @@ impl SkillSet {
         self.damage(AttackModifiers::builder(player, enemy, self))
     }
     pub fn experience_to_next_level(&self) -> u64 {
-        ln_power_power_power_scale(self.level) as u64
+        exp_scaling(self.level.pow(2))
     }
 
     pub fn action_base_damage(&self, player: &Character) -> ActionDice {
         let mut base_die = ActionDice::default();
-        self.skill.attribute(&mut base_die, &player.attributes);
+        let mut attributes = player.attributes.clone();
+        attributes += player.equipment.attribute();
+        self.skill.attribute(&mut base_die, &attributes);
         self.skill.elemental(&mut base_die);
         self.action_level_scaling(&mut base_die, player);
         base_die
     }
 
     pub fn action_level_scaling(&self, base_die: &mut ActionDice, player: &Character) {
-        let scaling = log_power_scale(player.level, Some(1.1)) as usize;
+        let scaling = log_power_scale(player.level as i32, Some(1.1)) as usize;
         let additional_die = vec![Die::D4.into(); scaling];
         base_die.add_existing_die(additional_die);
     }
 
     pub fn action_experience_scaling(&self, base_die: &mut ActionDice) {
-        let scaling = log_power_scale(self.level, Some(1.1)) as usize;
+        let scaling = log_power_scale(self.level as i32, Some(1.1)) as usize;
         let additional_die = vec![Die::D4.into(); scaling];
         base_die.add_existing_die(additional_die);
     }
@@ -213,13 +208,22 @@ impl Character {
         CharacterTraits::apply_traits(&self.traits)
     }
     pub fn experience_to_next_level(&self) -> u32 {
-        ln_power_power_power_scale(self.level)
+        ln_power_power_power_scale(self.level) - 200
+    }
+
+    pub fn action_points(&self) -> u32 {
+        let mut base_action_points = 1;
+        base_action_points += self.level / 10;
+        base_action_points += self.mutations().action_points();
+        base_action_points += self.equipment.action_points();
+        base_action_points
     }
     pub fn new(name: String, user_id: u64, class: Classes) -> Self {
         let max_hp = match class {
             Classes::Warrior => 20,
             Classes::Wizard => 10,
             Classes::Sorcerer => 10,
+            Classes::Paladin => 15,
         };
         Self {
             level: 1,
@@ -243,7 +247,8 @@ impl Character {
             Classes::Warrior => (constitution * 10) + 10,
             Classes::Wizard => (constitution * 3) + 5,
             Classes::Sorcerer => (constitution * 3) + 5,
-        };
+            Classes::Paladin => (constitution * 7) + 10,
+        } as u32;
         hp_gain + self.max_hp
     }
 
@@ -253,8 +258,7 @@ impl Character {
         self.hp = self.max_hp as i32;
         self.experience = self
             .experience
-            .checked_sub(self.experience_to_next_level())
-            .unwrap_or(0);
+            .saturating_sub(self.experience_to_next_level());
     }
 
     pub fn rest(&mut self) {
@@ -262,24 +266,33 @@ impl Character {
     }
 
     pub fn player_attack(&mut self, enemy: &mut Enemy, battle_info: &mut BattleInfo) {
-        let mut damage = self.current_skill.act(self, enemy);
-        if enemy.defense.success() {
-            let suppress = (enemy.defense.roll()).min(90);
-            let suppress_quantity = damage as f64 * suppress as f64 / 100.0;
-            damage -= suppress_quantity as u32;
+        for _ in 0..self.action_points() {
+            let mut damage = self.current_skill.act(self, enemy);
+            if enemy.defense.success() {
+                let suppress = (enemy.defense.roll()).min(99);
+                let suppress_quantity = damage as f64 * suppress as f64 / 100.0;
+
+                damage -= suppress_quantity as u32;
+            }
+
+            enemy.health -= damage as i32;
+            battle_info.damage_dealt += damage as i32;
+            battle_info.monster_hp = enemy.health;
+            debug!(
+                "{} attacked {} for {} damage! {} has {} hp",
+                self.name, enemy.kind, damage, enemy.kind, enemy.health
+            );
+            self.current_skill.experience += (enemy.experience / 10).max(1) as u64;
+            if enemy.health <= 0 {
+                break;
+            }
         }
 
-        enemy.health -= damage as i32;
-        battle_info.damage_dealt += damage as i32;
-        battle_info.monster_hp += enemy.health;
-        debug!(
-            "{} attacked {} for {} damage! {} has {} hp",
-            self.name, enemy.kind, damage, enemy.kind, enemy.health
-        );
-
         if enemy.health <= 0 {
+            battle_info.item_gained.extend(enemy.items.clone());
             battle_info.kill = true;
             battle_info.gold_gained += enemy.gold;
+            battle_info.experience_gained = enemy.experience;
             enemy.state = EnemyState::Dead;
             self.experience += enemy.experience;
             while self.experience >= self.experience_to_next_level() {
@@ -290,39 +303,45 @@ impl Character {
                     battle_info.traits_available += 1;
                 }
             }
-            self.current_skill.experience += enemy.experience as u64;
             battle_info.skill_experience_gained += enemy.experience;
-            while self.current_skill.experience
-                >= self.current_skill.experience_to_next_level() as u64
-            {
+            while self.current_skill.experience >= self.current_skill.experience_to_next_level() {
                 self.current_skill.level += 1;
                 self.current_skill.experience = self
                     .current_skill
                     .experience
-                    .checked_sub(self.current_skill.experience_to_next_level())
-                    .unwrap_or(0);
+                    .saturating_sub(self.current_skill.experience_to_next_level());
             }
         }
     }
 
-    pub fn enemy_attack(&mut self, enemy: &Enemy, battle_info: &mut BattleInfo) {
+    pub fn enemy_attack(&mut self, enemy: &mut Enemy, battle_info: &mut BattleInfo) {
         let (action, mob_action) = enemy.action();
         let defense: DefenseModifiers = self.into();
+        if let Some(regen) = ElementalScaling::scaling(&mob_action) {
+            if regen == DamageType::Healing {
+                let heal = action.magical().unwrap().roll();
+                enemy.health += heal as i32;
+                battle_info.healing_taken += heal as i32;
+                battle_info.enemy_action = mob_action.to_string();
+                battle_info.monster_name = enemy.kind.to_string();
+                return;
+            }
+        }
         if defense.dodge() {
             return;
         }
 
         if action.physical().is_some() {
             let damage = action.physical().unwrap().roll();
-            let mitigated_damage = damage - (damage as f64 * defense.physical_mitigation()) as u32;
 
+            let mitigated_damage = damage - (damage as f64 * defense.physical_mitigation()) as u32;
             battle_info.damage_taken += mitigated_damage as i32;
             self.hp -= mitigated_damage as i32;
         }
         if action.magical().is_some() {
             let damage = action.magical().unwrap().roll();
-            let mitigated_damage = damage - (damage as f64 * defense.magical_suppress()) as u32;
 
+            let mitigated_damage = damage - (damage as f64 * defense.magical_suppress()) as u32;
             battle_info.damage_taken += mitigated_damage as i32;
             self.hp -= mitigated_damage as i32;
         }
@@ -341,18 +360,19 @@ impl Display for Character {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut string = String::new();
         string.push_str("```");
-        string.push_str("\n");
+        string.push('\n');
         string.push_str(&format!("Name: {}\n", self.name));
         string.push_str(&format!("Level: {}\n", self.level));
         string.push_str(&format!("Class: {}\n", self.class));
         string.push_str(&format!("HP: {}/{}\n", self.hp, self.max_hp));
         string.push_str(&format!("Experience: {}\n", self.experience));
         string.push_str(&format!("Attributes: {}\n", self.attributes));
-        string.push_str(&format!("Traits:\n",));
+        string.push_str("Traits:\n");
+
         for tr in &self.traits {
             string.push_str(&format!("\t{}\n", tr));
         }
-        string.push_str("\n");
+        string.push_str(&format!("Equipment:\n{}", self.equipment));
         string.push_str("```");
         write!(f, "{}", string)
     }
@@ -360,25 +380,12 @@ impl Display for Character {
 
 #[cfg(test)]
 mod test {
-    use crate::mutators::AttackModifiers;
+    use crate::mutators::DefenseModifiers;
+    use crate::player::Character;
     use crate::units::Attribute::Intelligence;
     use crate::units::DamageType::Arcane;
     use crate::AttributeScaling;
     use crate::ElementalScaling;
-
-    #[test]
-    fn attack_modifiers() {
-        let attack_modifiers = AttackModifiers::default();
-        let damage = attack_modifiers.generate_damage_values();
-        assert!(damage > 0);
-    }
-
-    #[test]
-    fn player_action_print() {
-        use crate::skills::Skill;
-        let action = Skill::MagicMissile;
-        assert_eq!(action.to_string(), "Magic Missile");
-    }
 
     #[test]
     fn player_action_attributes() {
@@ -388,5 +395,120 @@ mod test {
         let attribute = AttributeScaling::scaling(&action);
         assert_eq!(element, Some(Arcane));
         assert_eq!(attribute, Some(Intelligence(0)));
+    }
+
+    #[test]
+    fn wizard_armor_is_low() {
+        let class = crate::classes::Classes::Wizard;
+        let mut character = Character::new("Test".to_string(), 0, class);
+        let defense: DefenseModifiers = (&mut character).into();
+        let mean_mitigation = (0..10000)
+            .map(|_| defense.physical_mitigation())
+            .sum::<f64>()
+            / 10000.0;
+        assert!(
+            mean_mitigation < 0.1,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
+    }
+
+    #[test]
+    fn sorcerer_mitigation_is_low() {
+        let class = crate::classes::Classes::Sorcerer;
+        let mut character = Character::new("Test".to_string(), 0, class);
+        let defense: DefenseModifiers = (&mut character).into();
+        let mean_mitigation = (0..10000)
+            .map(|_| defense.physical_mitigation())
+            .sum::<f64>()
+            / 10000.0;
+        assert!(
+            mean_mitigation < 0.05,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
+    }
+
+    #[test]
+    fn warrior_mitigation_is_high() {
+        let class = crate::classes::Classes::Warrior;
+        let mut character = Character::new("Test".to_string(), 0, class);
+        let defense: DefenseModifiers = (&mut character).into();
+        let mean_mitigation = (0..10000)
+            .map(|_| defense.physical_mitigation())
+            .sum::<f64>()
+            / 10000.0;
+        assert!(
+            mean_mitigation > 0.25,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
+        assert!(
+            mean_mitigation < 0.35,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
+    }
+
+    #[test]
+    fn robust_traits_works_on_wizard() {
+        let class = crate::classes::Classes::Wizard;
+        let mut character = Character::new("Test".to_string(), 0, class);
+        character
+            .traits
+            .insert(crate::traits::CharacterTraits::Robust);
+        let defense: DefenseModifiers = (&mut character).into();
+        let mean_mitigation = (0..10000)
+            .map(|_| defense.physical_mitigation())
+            .sum::<f64>()
+            / 10000.0;
+
+        assert!(
+            mean_mitigation > 0.15,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
+        assert!(
+            mean_mitigation < 0.25,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
+    }
+
+    #[test]
+    fn robust_trait_boosts_mitigation() {
+        let class = crate::classes::Classes::Warrior;
+        let mut character = Character::new("Test".to_string(), 0, class);
+        let defense: DefenseModifiers = (&mut character).into();
+        let previous_mean = (0..10000)
+            .map(|_| defense.physical_mitigation())
+            .sum::<f64>()
+            / 10000.0;
+        character
+            .traits
+            .insert(crate::traits::CharacterTraits::Robust);
+        let defense: DefenseModifiers = (&mut character).into();
+        let mean_mitigation = (0..10000)
+            .map(|_| defense.physical_mitigation())
+            .sum::<f64>()
+            / 10000.0;
+
+        assert!(
+            (mean_mitigation - 0.15) > previous_mean,
+            "Expected Robust mean {} to be higher than non-Robust mean {}",
+            mean_mitigation,
+            previous_mean
+        );
+
+        assert!(
+            mean_mitigation > 0.45,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
+        assert!(
+            mean_mitigation < 0.55,
+            "Mean mitigation was {}",
+            mean_mitigation
+        );
     }
 }

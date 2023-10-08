@@ -18,6 +18,8 @@ pub static ENEMY_TABLE: &str = "enemies";
 pub static ITEM_TABLE: &str = "items";
 
 pub static SKILL_TABLE: &str = "skills";
+
+pub static COMBAT_TABLE: &str = "combat";
 pub struct SurrealDB {}
 impl SurrealDB {
     pub async fn connect(address: &str) -> CarrionResult<()> {

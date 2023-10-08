@@ -1,5 +1,6 @@
 use rand::Rng;
 use serde::{Deserialize, Serialize};
+use std::ops::{Add, AddAssign};
 
 #[derive(Clone, PartialEq, Serialize, Deserialize, Debug)]
 pub struct DieObject {
@@ -50,10 +51,7 @@ impl DieObject {
     }
     pub fn set_critical(&mut self, critical: i32) {
         if critical < 0 {
-            self.critical = self
-                .critical
-                .checked_sub(critical.abs() as u32)
-                .unwrap_or(0);
+            self.critical = self.critical.saturating_sub(critical.unsigned_abs());
         } else {
             self.critical = self.critical.checked_add(critical as u32).unwrap_or(0);
         }
@@ -92,6 +90,36 @@ pub enum Die {
     D100,
 }
 
+impl From<&str> for Die {
+    fn from(value: &str) -> Self {
+        match value.to_lowercase().as_str() {
+            "d4" => Die::D4,
+            "d6" => Die::D6,
+            "d8" => Die::D8,
+            "d10" => Die::D10,
+            "d12" => Die::D12,
+            "d20" => Die::D20,
+            "d100" => Die::D100,
+            _ => panic!("Invalid die type {}", value),
+        }
+    }
+}
+
+impl From<String> for Die {
+    fn from(value: String) -> Self {
+        match value.to_lowercase().as_str() {
+            "d4" => Die::D4,
+            "d6" => Die::D6,
+            "d8" => Die::D8,
+            "d10" => Die::D10,
+            "d12" => Die::D12,
+            "d20" => Die::D20,
+            "d100" => Die::D100,
+            _ => panic!("Invalid die type {}", value),
+        }
+    }
+}
+
 impl Die {
     fn sides(&self) -> u32 {
         match self {
@@ -118,6 +146,10 @@ impl Die {
             return std::cmp::min(roll1, roll2);
         }
         rng.gen_range(ranges)
+    }
+
+    pub fn n_die(die: Die, n: usize) -> (Die, usize) {
+        (die, n)
     }
 }
 
@@ -160,12 +192,10 @@ impl AdvantageState {
 
 impl From<i32> for AdvantageState {
     fn from(n: i32) -> Self {
-        if n > 0 {
-            AdvantageState::Advantage
-        } else if n < 0 {
-            AdvantageState::Disadvantage
-        } else {
-            AdvantageState::None
+        match n {
+            0 => AdvantageState::None,
+            1..=i32::MAX => AdvantageState::Advantage,
+            i32::MIN..=-1 => AdvantageState::Disadvantage,
         }
     }
 }
@@ -178,6 +208,14 @@ pub struct Dice {
 impl Dice {
     pub fn new(dice: Vec<DieObject>) -> Self {
         Self { dice }
+    }
+
+    pub fn zero() -> Self {
+        Self::new(vec![])
+    }
+
+    pub fn new_from(d: Die, n: usize) -> Dice {
+        Self::new(vec![DieObject::new(d); n])
     }
     pub fn empty() -> Self {
         Self { dice: vec![] }
@@ -205,6 +243,10 @@ impl Dice {
 
     pub fn add_die(&mut self, die: Vec<DieObject>) {
         self.dice.extend(die);
+    }
+
+    pub fn add_dice(&mut self, dice: Dice) {
+        self.dice.extend(dice.dice);
     }
 
     pub fn advantage(&mut self) -> &mut Dice {
@@ -252,6 +294,22 @@ impl Dice {
     }
 }
 
+impl Add for Dice {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let mut dice = self.dice;
+        dice.extend(rhs.dice);
+        Self::new(dice)
+    }
+}
+
+impl AddAssign for Dice {
+    fn add_assign(&mut self, rhs: Self) {
+        self.dice.extend(rhs.dice);
+    }
+}
+
 impl Default for Dice {
     fn default() -> Self {
         Self {
@@ -269,9 +327,9 @@ mod tests {
     fn test_lower_crit() {
         let die = Die::D20;
         let mut dice = Dice::new(vec![die.into()]);
-        let old_crit = dice.dice()[0].critical.clone();
+        let old_crit = dice.dice()[0].critical;
         dice.dice().iter_mut().for_each(|d| d.set_critical(-1));
-        let new_crit = dice.dice()[0].critical.clone();
+        let new_crit = dice.dice()[0].critical;
         assert_eq!(new_crit, (old_crit - 1));
     }
 

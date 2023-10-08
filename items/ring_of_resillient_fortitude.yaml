@@ -1,0 +1,52 @@
+name: Ring of Resilient Fortitude
+description: The Ring of Resilient Fortitude is a masterwork of protection, designed to shield its wearer from harm. Crafted by ancient guardians, it bestows upon the wearer unparalleled resistance, making them nearly impervious to damage.
+slot: Ring
+resistance:
+  Fire:
+    die: D4
+    quantity: 1
+  Water:
+    die: D4
+    quantity: 1
+  Earth:
+    die: D4
+    quantity: 1
+  Air:
+    die: D4
+    quantity: 1
+  Light:
+    die: D4
+    quantity: 1
+  Dark:
+    die: D4
+    quantity: 1
+  Iron:
+    die: D4
+    quantity: 1
+  Arcane:
+    die: D4
+    quantity: 1
+  Holy:
+    die: D4
+    quantity: 1
+  NonElemental:
+    die: D4
+    quantity: 1
+  Physical:
+    die: D4
+    quantity: 1
+  Hope:
+    die: D4
+    quantity: 1
+  Despair:
+    die: D4
+    quantity: 1
+  Existential:
+    die: D4
+    quantity: 1
+  Prismatic:
+    die: D4
+    quantity: 1
+rarity: Epic
+action: 0
+value: 180

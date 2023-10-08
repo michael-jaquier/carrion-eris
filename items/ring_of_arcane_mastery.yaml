@@ -1,0 +1,10 @@
+name: Ring of Arcane Mastery
+description: The Ring of Arcane Mastery is an artifact of unparalleled magical power. Infused with the essence of arcane realms, it amplifies the wearer's magical abilities to astounding levels, enabling them to wield devastating arcane magic.
+slot: Ring
+damage:
+  Arcane:
+    die: D10
+    quantity: 1
+rarity: Epic
+action: 0
+value: 200

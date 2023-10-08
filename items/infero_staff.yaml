@@ -1,0 +1,19 @@
+name: Inferno Staff
+description: The Inferno Staff is a legendary weapon, a conduit of scorching flames and searing heat. It is said to contain the essence of a raging inferno, ready to unleash its fiery wrath upon all who oppose its wielder.
+slot: Weapon
+armor: null
+resistance: null
+damage:
+  Fire:
+    die: D20
+    quantity: 10
+attribute_bonus:
+  strength: 0
+  dexterity: 0
+  constitution: 0
+  intelligence: 15
+  wisdom: 0
+  charisma: 0
+action: 0
+rarity: Legendary
+value: 260

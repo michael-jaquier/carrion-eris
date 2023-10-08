@@ -5,10 +5,10 @@ use std::ops::Div;
 
 use crate::dice::{AdvantageState, Dice, Die, DieObject};
 use crate::skills::Skill;
-use crate::EnemyEvents;
+use crate::{ElementalScaling, EnemyEvents};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
-#[derive(Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AttackModifiers {
     dice_set: ActionDice,
     player: Character,
@@ -27,7 +27,7 @@ impl AttackModifiers {
     }
     pub fn builder(player: &Character, enemy: &Enemy, skill: &SkillSet) -> AttackModifiers {
         AttackModifiers::new(Default::default(), player, enemy, skill)
-            .apply_skill_base(&player)
+            .apply_skill_base(player)
             .apply_vulnerability(enemy, &player.class.action())
             .clone()
     }
@@ -85,13 +85,13 @@ impl AttackModifiers {
     }
 
     fn apply_traits(&self, enemy: &Enemy, base: &Dice, mutations: &Vec<TraitMutation>) -> f64 {
-        let advantage = TraitMutations::advantage(&mutations);
-        let critical_advantage = TraitMutations::critical_advantage(&mutations);
-        let critical_multiplier = TraitMutations::critical_multiplier(&mutations);
-        let multi = TraitMutations::multi(&mutations);
+        let advantage = TraitMutations::advantage(mutations);
+        let critical_advantage = TraitMutations::critical_advantage(mutations);
+        let critical_multiplier = TraitMutations::critical_multiplier(mutations);
+        let multi = TraitMutations::multi(mutations);
         let map_unique = |d: Dice, ad: AdvantageState| {
             let mut d = d;
-            d.set_critical_advantage(critical_advantage.into());
+            d.set_critical_advantage(critical_advantage);
             d.set_critical_multiplier(critical_multiplier);
             d.set_advantage(ad);
             d.roll() as f64 * multi
@@ -104,7 +104,7 @@ impl AttackModifiers {
                     rolls += map_unique(Dice::new(e.clone()), advantage.into());
                 }
                 TraitMutation::FlatDecrease(e) => {
-                    rolls -= map_unique(Dice::new(e.clone()), (advantage * -1).into());
+                    rolls -= map_unique(Dice::new(e.clone()), (-advantage).into());
                 }
 
                 TraitMutation::AlignmentBonus(e, d) => {
@@ -123,11 +123,16 @@ impl AttackModifiers {
         if let Some(physical) = &self.physical() {
             let mut dmg = self.apply_traits(
                 &self.enemy,
-                &physical,
-                &self.player.mutations().get_physical_attack(),
+                physical,
+                self.player.mutations().get_physical_attack(),
             );
             if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
                 dmg += dmg * dice.roll() as f64 / 5.0;
+            }
+            if let Some(element) = self.skill.skill.scaling() {
+                if let Some(x) = self.player.equipment.damage().get(&element) {
+                    dmg += x.roll() as f64;
+                }
             }
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
@@ -138,12 +143,18 @@ impl AttackModifiers {
         if let Some(magical) = &self.magical() {
             let mut dmg = self.apply_traits(
                 &self.enemy,
-                &magical,
-                &self.player.mutations().get_physical_attack(),
+                magical,
+                self.player.mutations().get_physical_attack(),
             );
             if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
                 dmg += dmg * dice.roll() as f64 / 5.0;
             }
+            if let Some(element) = self.skill.skill.scaling() {
+                if let Some(x) = self.player.equipment.damage().get(&element) {
+                    dmg += x.roll() as f64;
+                }
+            }
+
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
@@ -154,27 +165,12 @@ impl AttackModifiers {
     }
 }
 
-impl Default for AttackModifiers {
-    fn default() -> Self {
-        Self {
-            dice_set: Default::default(),
-            player: Default::default(),
-            skill: Default::default(),
-            enemy: Default::default(),
-        }
-    }
-}
+#[derive(Default)]
 
 pub struct DefenseModifiers {
     character: Character,
 }
-impl Default for DefenseModifiers {
-    fn default() -> Self {
-        Self {
-            character: Character::default(),
-        }
-    }
-}
+
 impl DefenseModifiers {
     pub fn new(character: &Character) -> Self {
         Self {
@@ -185,8 +181,8 @@ impl DefenseModifiers {
     pub fn dodge(&self) -> bool {
         let binding = self.character.mutations();
         let mutations = binding.get_dodge();
-        let advantage = TraitMutations::advantage(&mutations);
-        let multi = TraitMutations::multi(&mutations);
+        let advantage = TraitMutations::advantage(mutations);
+        let multi = TraitMutations::multi(mutations);
         let map_rolls = |x: bool| if x { 1.0 * multi } else { -1.0 };
 
         let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).success());
@@ -203,7 +199,7 @@ impl DefenseModifiers {
                 TraitMutation::FlatDecrease(e) => {
                     rolls -= map_rolls(
                         Dice::new(e.clone())
-                            .set_advantage((advantage * -1).into())
+                            .set_advantage((-advantage).into())
                             .success(),
                     );
                 }
@@ -217,11 +213,21 @@ impl DefenseModifiers {
     pub fn physical_mitigation(&self) -> f64 {
         let binding = self.character.mutations();
         let mutations = binding.get_armor();
-        let advantage = TraitMutations::advantage(&mutations);
-        let multi = TraitMutations::multi(&mutations);
+        let advantage = TraitMutations::advantage(mutations);
+        let multi = TraitMutations::multi(mutations);
         let map_rolls = |x: u32| (x as f64 * multi);
 
-        let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).roll());
+        let base = (self.character.class.armor_scaling()
+            * ((self.character.attributes.constitution.inner()
+                + self.character.attributes.strength.inner()) as f64
+                / 2_f64))
+            .floor() as usize;
+
+        let mut rolls = map_rolls(
+            Dice::new(vec![Die::D4.into(); base.max(1)])
+                .set_advantage(advantage.into())
+                .roll(),
+        );
         for tr in mutations {
             match tr {
                 TraitMutation::FlatIncrease(e) => {
@@ -230,7 +236,7 @@ impl DefenseModifiers {
                 TraitMutation::FlatDecrease(e) => {
                     rolls -= map_rolls(
                         Dice::new(e.clone())
-                            .set_advantage((advantage * -1).into())
+                            .set_advantage((-advantage).into())
                             .roll(),
                     );
                 }
@@ -244,8 +250,8 @@ impl DefenseModifiers {
     pub fn magical_suppress(&self) -> f64 {
         let binding = self.character.mutations();
         let mutations = binding.get_suppress();
-        let advantage = TraitMutations::advantage(&mutations);
-        let multi = TraitMutations::multi(&mutations);
+        let advantage = TraitMutations::advantage(mutations);
+        let multi = TraitMutations::multi(mutations);
         let map_rolls = |x: bool| if x { 1.0 * multi } else { -1.0 };
 
         let mut rolls = map_rolls(Dice::default().set_advantage(advantage.into()).success());
@@ -262,7 +268,7 @@ impl DefenseModifiers {
                 TraitMutation::FlatDecrease(e) => {
                     rolls -= map_rolls(
                         Dice::new(e.clone())
-                            .set_advantage((advantage * -1).into())
+                            .set_advantage((-advantage).into())
                             .success(),
                     );
                 }

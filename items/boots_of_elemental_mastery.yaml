@@ -1,0 +1,35 @@
+name: Boots of Elemental Mastery
+description: The Boots of Elemental Mastery are legendary footwear forged in the heart of an ancient volcano and imbued with the essence of the elements themselves. Each boot is adorned with intricate runes representing the elemental forces of fire, water, earth, and air. When worn, they grant the wearer unparalleled control over the elements.
+slot: Feet
+armor:
+    die: D12
+    quantity: 4
+resistance:
+  Fire:
+    die: D8
+    quantity: 2
+  Water:
+    die: D8
+    quantity: 2
+  Earth:
+    die: D8
+    quantity: 2
+  Air:
+    die: D8
+    quantity: 2
+damage:
+  Fire:
+    die: D8
+    quantity: 2
+  Water:
+    die: D8
+    quantity: 2
+  Earth:
+    die: D8
+    quantity: 2
+  Air:
+    die: D8
+    quantity: 2
+action: 0
+rarity: Legendary
+value: 300

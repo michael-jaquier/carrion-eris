@@ -1,6 +1,6 @@
 use crate::database::surreal::consumer::SurrealConsumer;
 use crate::database::surreal::producer::SurrealProducer;
-use crate::enemies::{Enemy, Mob};
+use crate::enemies::{Enemy, Mob, MobGrade};
 use crate::player::{Character, SkillSet};
 
 use rand::random;
@@ -8,18 +8,12 @@ use serde::{Deserialize, Serialize};
 
 use std::fmt::Display;
 
-use crate::BattleInfo;
-use tracing::{debug, warn};
+use crate::{BattleInfo, EnemyEvents};
+use tracing::{debug, info, warn};
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BattleResult {
     pub result: Vec<BattleInfo>,
-}
-
-impl Default for BattleResult {
-    fn default() -> Self {
-        Self { result: vec![] }
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,7 +36,7 @@ impl Display for BattleResult {
         let mut string = String::new();
         for result in &self.result {
             string.push_str(&result.to_string());
-            string.push_str("\n")
+            string.push('n')
         }
         write!(f, "{}", string)
     }
@@ -52,33 +46,55 @@ async fn single_turn(character: &mut Character, enemy: &mut Enemy, battle_info: 
     character.player_attack(enemy, battle_info);
     // If the enemy is dead they should not act
     if enemy.alive() {
-        character.enemy_attack(&enemy, battle_info);
+        character.enemy_attack(enemy, battle_info);
     }
 }
 
-async fn battle(mut character: &mut Character) -> BattleInfo {
+async fn battle(character: &mut Character) -> BattleInfo {
     let mut enemy;
     let mut enemy_id = None;
-    if let Some((e, t)) = SurrealConsumer::get_related_enemies(&character)
+    if let Some((e, t)) = SurrealConsumer::get_related_enemies(character)
         .await
         .unwrap()
-        .first()
     {
         enemy = e.clone();
         enemy_id = Option::from(t.clone());
     } else {
-        let mob_choice: Mob = random();
-        enemy = mob_choice.generate(&character);
+        let mut mob_choice: Mob = random();
+        while character.level < 10 && mob_choice.grade() == MobGrade::Boss {
+            mob_choice = random();
+        }
+        enemy = mob_choice.generate(character);
     }
-    let mut battle_info = BattleInfo::begin(&character, &enemy);
+    info!(
+        "Enemy: Health: {}, Level: {}, Experience: {}",
+        enemy.health, enemy.level, enemy.experience
+    );
+    let mut battle_info = BattleInfo::begin(character, &enemy);
     while enemy.alive() && character.hp > 0 {
-        single_turn(&mut character, &mut enemy, &mut battle_info).await;
+        single_turn(character, &mut enemy, &mut battle_info).await;
     }
 
-    SurrealProducer::store_related_enemy(&character, &enemy, enemy_id)
+    SurrealProducer::store_related_enemy(character, &enemy, enemy_id)
         .await
         .expect("Failed to store enemy");
+    battle_info.next_level = character.experience_to_next_level() - character.experience;
+    if !battle_info.item_gained.is_empty() {
+        if let Some(mut items) = SurrealConsumer::get_items(character.user_id)
+            .await
+            .expect("Failed to get items")
+        {
+            for item in &battle_info.item_gained {
+                if let Some(store_item) = character.equipment.auto_equip(*item) {
+                    items.push(store_item);
+                }
+            }
 
+            SurrealProducer::store_user_items(items, character.user_id)
+                .await
+                .expect("Failed to store items");
+        }
+    }
     battle_info
 }
 
@@ -105,13 +121,9 @@ pub async fn all_battle() -> BattleResults {
 
                 let result = battle(&mut character).await;
 
-                SurrealProducer::patch_user_gold(
-                    result.gold_gained.clone(),
-                    character.user_id,
-                    false,
-                )
-                .await
-                .expect("Failed to patch gold");
+                SurrealProducer::patch_user_gold(result.gold_gained, character.user_id, false)
+                    .await
+                    .expect("Failed to patch gold");
 
                 if character.hp > character.max_hp as i32 {
                     warn!("Character: {:?} has more hp than max_hp", character)

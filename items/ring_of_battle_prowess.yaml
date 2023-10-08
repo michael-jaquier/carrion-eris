@@ -1,0 +1,10 @@
+name: Ring of Battle Prowess
+description: The Ring of Battle Prowess is a legendary ring forged for those who thrive in the heat of combat. It exudes an aura of unyielding determination, granting its wearer an extra action in battle, allowing them to strike with unmatched speed.
+slot: Ring
+action: 1
+damage:
+  Physical:
+    die: D10
+    quantity: 1
+rarity: Epic
+value: 200

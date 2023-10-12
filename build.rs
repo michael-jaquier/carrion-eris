@@ -83,6 +83,8 @@ fn main() -> std::io::Result<()> {
     }
 
     let mut source_code = String::new();
+    source_code.push_str("#[rustfmt::skip]");
+    source_code.push_str("/// @generated\n");
     source_code.push_str("/// This file is auto-generated. Do not edit!\n");
     source_code.push_str("use serde::Serialize;\n");
     source_code.push_str("use serde::Deserialize;\n");

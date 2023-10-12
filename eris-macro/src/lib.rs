@@ -61,3 +61,11 @@ pub fn eris_equipment_assisgn(input: proc_macro::TokenStream) -> proc_macro::Tok
     let toks = items::eris_assign_equipment(&ast);
     toks.into()
 }
+
+#[proc_macro_error]
+#[proc_macro_derive(ErisTryFrom)]
+pub fn eris_try_from(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let ast = syn::parse_macro_input!(input as syn::DeriveInput);
+    let toks = player_actions::eris_valid_try(&ast);
+    toks.into()
+}

@@ -1,4 +1,4 @@
-use crate::enemies::{Enemy, EnemyState};
+use crate::enemies::Enemy;
 use crate::{
     exp_scaling, ln_power_power_power_scale, log_power_scale, BattleInfo, ElementalScaling,
 };
@@ -19,7 +19,6 @@ use crate::dice::{AdvantageState, Dice, Die, DieObject};
 use crate::items::Equipment;
 use crate::skills::Skill;
 use tracing::log::debug;
-use tracing::warn;
 
 pub type PhysicalMagical = ((u32, bool), (u32, bool));
 pub type MagicalDice = Option<Dice>;
@@ -32,6 +31,21 @@ pub struct ActionDice {
 }
 
 impl ActionDice {
+    pub fn len(&self) -> usize {
+        let mut len = 0;
+        if let Some(d) = &self.physical {
+            len += d.len();
+        }
+        if let Some(d) = &self.magical {
+            len += d.len();
+        }
+        len
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn physical_mut(&mut self) -> Option<&mut Dice> {
         self.physical.as_mut()
     }
@@ -124,15 +138,24 @@ impl Display for SkillSet {
 impl SkillSet {
     pub fn new(skill: Skill) -> Self {
         Self {
-            skill: skill.clone(),
+            skill,
             experience: 0,
             active: true,
             level: 1,
         }
     }
 
+    pub fn try_level_up(&mut self) {
+        while self.experience >= self.experience_to_next_level() {
+            self.level += 1;
+            self.experience = self
+                .experience
+                .saturating_sub(self.experience_to_next_level());
+        }
+    }
+
     pub fn skill(&self) -> Skill {
-        self.skill.clone()
+        self.skill
     }
     pub fn damage(&self, modifiers: AttackModifiers) -> u32 {
         modifiers.generate_damage_values()
@@ -152,12 +175,14 @@ impl SkillSet {
         self.skill.attribute(&mut base_die, &attributes);
         self.skill.elemental(&mut base_die);
         self.action_level_scaling(&mut base_die, player);
+
         base_die
     }
 
     pub fn action_level_scaling(&self, base_die: &mut ActionDice, player: &Character) {
         let scaling = log_power_scale(player.level as i32, Some(1.1)) as usize;
         let additional_die = vec![Die::D4.into(); scaling];
+
         base_die.add_existing_die(additional_die);
     }
 
@@ -225,6 +250,9 @@ impl Character {
             Classes::Sorcerer => 10,
             Classes::Paladin => 15,
         };
+
+        let base_skill = SkillSet::new(class.action());
+
         Self {
             level: 1,
             name,
@@ -236,7 +264,7 @@ impl Character {
             attributes: (&class).into(),
             traits: HashSet::new(),
             available_traits: 0,
-            current_skill: SkillSet::default(),
+            current_skill: base_skill,
             equipment: Default::default(),
         }
     }
@@ -252,21 +280,38 @@ impl Character {
         hp_gain + self.max_hp
     }
 
-    pub fn level_up(&mut self) {
+    pub fn try_trait_gain(&mut self) -> bool {
+        if self.level % 10 == 0
+            && (self.available_traits + self.traits.len() as u32) < self.level / 10
+        {
+            self.available_traits += 1;
+            return true;
+        }
+
+        false
+    }
+
+    pub fn try_level_up(&mut self) -> bool {
+        if self.experience < self.experience_to_next_level() {
+            return false;
+        }
+
         self.level += 1;
         self.max_hp = self.hp_gain(self.level);
         self.hp = self.max_hp as i32;
         self.experience = self
             .experience
             .saturating_sub(self.experience_to_next_level());
+        true
     }
 
     pub fn rest(&mut self) {
         self.hp = self.max_hp as i32;
     }
 
-    pub fn player_attack(&mut self, enemy: &mut Enemy, battle_info: &mut BattleInfo) {
+    pub fn player_attack(&self, enemy: &Enemy, battle_info: &mut BattleInfo) {
         for _ in 0..self.action_points() {
+            battle_info.number_of_player_attacks += 1;
             let mut damage = self.current_skill.act(self, enemy);
             if enemy.defense.success() {
                 let suppress = (enemy.defense.roll()).min(99);
@@ -275,53 +320,35 @@ impl Character {
                 damage -= suppress_quantity as u32;
             }
 
-            enemy.health -= damage as i32;
             battle_info.damage_dealt += damage as i32;
             battle_info.monster_hp = enemy.health;
             debug!(
                 "{} attacked {} for {} damage! {} has {} hp",
                 self.name, enemy.kind, damage, enemy.kind, enemy.health
             );
-            self.current_skill.experience += (enemy.experience / 10).max(1) as u64;
-            if enemy.health <= 0 {
+            battle_info.skill_experience_gained += (enemy.experience / 10).max(1);
+            if battle_info.damage_dealt > enemy.health {
                 break;
             }
         }
 
-        if enemy.health <= 0 {
+        if battle_info.damage_dealt > enemy.health {
             battle_info.item_gained.extend(enemy.items.clone());
-            battle_info.kill = true;
+            battle_info.player_killed = true;
             battle_info.gold_gained += enemy.gold;
             battle_info.experience_gained = enemy.experience;
-            enemy.state = EnemyState::Dead;
-            self.experience += enemy.experience;
-            while self.experience >= self.experience_to_next_level() {
-                self.level_up();
-                battle_info.leveled_up = true;
-                if self.level % 10 == 0 {
-                    self.available_traits += 1;
-                    battle_info.traits_available += 1;
-                }
-            }
-            battle_info.skill_experience_gained += enemy.experience;
-            while self.current_skill.experience >= self.current_skill.experience_to_next_level() {
-                self.current_skill.level += 1;
-                self.current_skill.experience = self
-                    .current_skill
-                    .experience
-                    .saturating_sub(self.current_skill.experience_to_next_level());
-            }
+            battle_info.experience_gained += enemy.experience;
+            battle_info.traits_available = self.available_traits;
         }
     }
 
-    pub fn enemy_attack(&mut self, enemy: &mut Enemy, battle_info: &mut BattleInfo) {
+    pub fn enemy_attack(&self, enemy: &Enemy, battle_info: &mut BattleInfo) {
         let (action, mob_action) = enemy.action();
         let defense: DefenseModifiers = self.into();
         if let Some(regen) = ElementalScaling::scaling(&mob_action) {
             if regen == DamageType::Healing {
                 let heal = action.magical().unwrap().roll();
-                enemy.health += heal as i32;
-                battle_info.healing_taken += heal as i32;
+                battle_info.enemy_healing += heal as i32;
                 battle_info.enemy_action = mob_action.to_string();
                 battle_info.monster_name = enemy.kind.to_string();
                 return;
@@ -333,24 +360,16 @@ impl Character {
 
         if action.physical().is_some() {
             let damage = action.physical().unwrap().roll();
-
             let mitigated_damage = damage - (damage as f64 * defense.physical_mitigation()) as u32;
             battle_info.damage_taken += mitigated_damage as i32;
-            self.hp -= mitigated_damage as i32;
         }
         if action.magical().is_some() {
             let damage = action.magical().unwrap().roll();
 
             let mitigated_damage = damage - (damage as f64 * defense.magical_suppress()) as u32;
             battle_info.damage_taken += mitigated_damage as i32;
-            self.hp -= mitigated_damage as i32;
         }
 
-        if self.hp > self.max_hp as i32 {
-            warn!("{} has more hp than max hp!", self.name);
-            self.hp = self.max_hp as i32;
-        }
-        self.hp = self.hp.max(0);
         battle_info.enemy_action = mob_action.to_string();
         battle_info.monster_name = enemy.kind.to_string();
     }

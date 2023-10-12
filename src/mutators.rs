@@ -3,7 +3,7 @@ use crate::player::{ActionDice, Character, SkillSet};
 use crate::traits::{TraitMutation, TraitMutations};
 use std::ops::Div;
 
-use crate::dice::{AdvantageState, Dice, Die, DieObject};
+use crate::dice::{AdvantageState, Dice, Die};
 use crate::skills::Skill;
 use crate::{ElementalScaling, EnemyEvents};
 use rand::{thread_rng, Rng};
@@ -28,16 +28,7 @@ impl AttackModifiers {
     pub fn builder(player: &Character, enemy: &Enemy, skill: &SkillSet) -> AttackModifiers {
         AttackModifiers::new(Default::default(), player, enemy, skill)
             .apply_skill_base(player)
-            .apply_vulnerability(enemy, &player.class.action())
             .clone()
-    }
-
-    fn physical_mut(&mut self) -> Option<&mut Dice> {
-        self.dice_set.physical_mut()
-    }
-
-    fn magical_mut(&mut self) -> Option<&mut Dice> {
-        self.dice_set.magical_mut()
     }
 
     fn physical(&self) -> Option<&Dice> {
@@ -48,40 +39,21 @@ impl AttackModifiers {
         self.dice_set.magical()
     }
 
-    fn add_existing_die(&mut self, die: Vec<DieObject>) {
-        if self.physical_mut().is_some() && self.magical_mut().is_some() {
-            for d in die {
-                let choice = thread_rng().gen_bool(0.5);
-                if choice {
-                    self.physical_mut().as_mut().unwrap().add_die(vec![d]);
-                } else {
-                    self.magical_mut().as_mut().unwrap().add_die(vec![d]);
-                }
-            }
-        } else {
-            if let Some(d) = self.physical_mut().as_mut() {
-                d.add_die(die.clone());
-            }
-            if let Some(d) = self.magical_mut().as_mut() {
-                d.add_die(die.clone());
-            }
-        }
-    }
-
     fn apply_skill_base(&mut self, player: &Character) -> &mut AttackModifiers {
         self.dice_set = self.skill.action_base_damage(player);
+
         self
     }
 
-    fn apply_vulnerability(&mut self, enemy: &Enemy, action: &Skill) -> &mut AttackModifiers {
+    fn apply_vulnerability(&self, enemy: &Enemy, action: &Skill) -> f64 {
         if let Some(vulnerability) = enemy.kind.vulnerability() {
             if let Some(action_element) = crate::ElementalScaling::scaling(action) {
                 if action_element == vulnerability {
-                    self.add_existing_die(vec![Die::D10.into(); 2])
+                    return 2.0;
                 }
             }
         }
-        self
+        1.0
     }
 
     fn apply_traits(&self, enemy: &Enemy, base: &Dice, mutations: &Vec<TraitMutation>) -> f64 {
@@ -116,6 +88,7 @@ impl AttackModifiers {
                 _ => {}
             }
         }
+
         rolls
     }
 
@@ -126,14 +99,15 @@ impl AttackModifiers {
                 physical,
                 self.player.mutations().get_physical_attack(),
             );
-            if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
-                dmg += dmg * dice.roll() as f64 / 5.0;
-            }
+
             if let Some(element) = self.skill.skill.scaling() {
                 if let Some(x) = self.player.equipment.damage().get(&element) {
                     dmg += x.roll() as f64;
                 }
             }
+
+            dmg *= self.apply_vulnerability(&self.enemy, &self.skill.skill);
+
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
@@ -146,15 +120,13 @@ impl AttackModifiers {
                 magical,
                 self.player.mutations().get_physical_attack(),
             );
-            if let Some(dice) = self.skill.action_base_damage(&self.player).physical {
-                dmg += dmg * dice.roll() as f64 / 5.0;
-            }
+
             if let Some(element) = self.skill.skill.scaling() {
                 if let Some(x) = self.player.equipment.damage().get(&element) {
                     dmg += x.roll() as f64;
                 }
             }
-
+            dmg *= self.apply_vulnerability(&self.enemy, &self.skill.skill);
             return thread_rng().gen_range(dmg..dmg * 2.0) as u32;
         }
         0
@@ -286,6 +258,14 @@ impl DefenseModifiers {
 
 impl From<&mut Character> for DefenseModifiers {
     fn from(character: &mut Character) -> Self {
+        Self {
+            character: character.clone(),
+        }
+    }
+}
+
+impl From<&Character> for DefenseModifiers {
+    fn from(character: &Character) -> Self {
         Self {
             character: character.clone(),
         }

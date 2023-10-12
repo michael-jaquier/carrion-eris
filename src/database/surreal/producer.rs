@@ -1,11 +1,10 @@
-use crate::database::surreal::{CHARACTER_TABLE, COMBAT_TABLE, DB, ENEMY_TABLE, ITEM_TABLE};
-use crate::enemies::Enemy;
+use crate::database::surreal::{CHARACTER_TABLE, DB, ENEMY_TABLE, ITEM_TABLE, MOB_TABLE};
+use crate::enemies::{Enemy, Mob};
 use crate::player::{Character, SkillSet};
-use crate::{CarrionResult, Record};
+use crate::{CarrionResult, MobQueue, Record};
 
 use surrealdb::opt::PatchOp;
 use surrealdb::sql::Thing;
-use surrealdb::Response;
 
 use crate::database::surreal::consumer::SurrealConsumer;
 use tracing::{debug, info};
@@ -72,7 +71,26 @@ impl SurrealProducer {
         Ok(record)
     }
 
-    pub async fn store_enemy(
+    pub async fn patch_character(content: Character) -> CarrionResult<Option<Record>> {
+        let patch_hp = PatchOp::replace("/hp", content.hp);
+        let patch_level = PatchOp::replace("/level", content.level);
+        let patch_experience = PatchOp::replace("/experience", content.experience);
+        let patch_equipment = PatchOp::replace("/equipment", content.equipment);
+        let patch_traits = PatchOp::replace("/traits", content.traits);
+        let patch_available_traits =
+            PatchOp::replace("/available_traits", content.available_traits);
+        Ok(DB
+            .update((CHARACTER_TABLE, content.user_id))
+            .patch(patch_hp)
+            .patch(patch_level)
+            .patch(patch_experience)
+            .patch(patch_equipment)
+            .patch(patch_traits)
+            .patch(patch_available_traits)
+            .await?)
+    }
+
+    pub async fn store_active_enemy(
         content: Enemy,
         character: &Character,
     ) -> CarrionResult<Option<Record>> {
@@ -81,6 +99,39 @@ impl SurrealProducer {
             .update((ENEMY_TABLE, character.user_id))
             .content(content)
             .await?;
+        Ok(record)
+    }
+
+    pub async fn store_mob_queue(
+        character: &Character,
+        enemies: Vec<Mob>,
+    ) -> CarrionResult<Option<Record>> {
+        info!("Storing Enemies: {:?}", enemies);
+
+        let record = DB
+            .update((MOB_TABLE, character.user_id))
+            .content(MobQueue { mobs: enemies })
+            .await?;
+        Ok(record)
+    }
+
+    pub async fn patch_mob_queue(
+        character: &Character,
+        enemies: Vec<Mob>,
+    ) -> CarrionResult<Option<Record>> {
+        info!("Patching Enemies: {:?}", enemies);
+
+        let patch = PatchOp::add("/mobs", enemies);
+        let record = DB
+            .update((MOB_TABLE, character.user_id))
+            .patch(patch)
+            .await?;
+        Ok(record)
+    }
+
+    pub async fn delete_mob_queue(user_id: u64) -> CarrionResult<Option<Record>> {
+        let record = DB.delete((MOB_TABLE, user_id)).await?;
+        debug!("Deleted Mob Queue for: {:?}", record);
         Ok(record)
     }
 
@@ -99,19 +150,25 @@ impl SurrealProducer {
         Ok(record)
     }
 
+    pub async fn delete_user_items(user_id: u64) -> CarrionResult<Option<Record>> {
+        let record = DB.delete((ITEM_TABLE, user_id)).await?;
+        debug!("Deleted Items for: {:?}", record);
+        Ok(record)
+    }
+
     pub async fn create_user_items(user_id: Thing) -> CarrionResult<Option<Record>> {
         let items = crate::items::Items::default();
         Ok(DB.update((ITEM_TABLE, user_id.id)).content(items).await?)
     }
 
     pub async fn patch_user_gold(
-        content: u64,
+        gold: u64,
         user_id: u64,
         negative: bool,
     ) -> CarrionResult<Option<Record>> {
-        debug!("Patching Gold: {:?}", content);
+        debug!("Patching Gold: {:?}", gold);
         let now = tokio::time::Instant::now();
-        if content == 0 {
+        if gold == 0 {
             return Ok(None);
         }
         let old_gold = match SurrealConsumer::get_items(user_id).await? {
@@ -123,98 +180,15 @@ impl SurrealProducer {
             }
         };
         let gold = if negative {
-            old_gold.saturating_sub(content)
+            old_gold.saturating_sub(gold)
         } else {
-            old_gold + content
+            old_gold + gold
         };
         let patch = PatchOp::replace("/gold", gold);
         let record = DB.update((ITEM_TABLE, user_id)).patch(patch).await?;
         debug!("Patched Gold: {:?}", record);
         debug!("Patched Gold: {:?}", now.elapsed());
         Ok(record)
-    }
-
-    pub async fn store_related_enemies(
-        character: &Character,
-        enemies: Vec<Enemy>,
-    ) -> CarrionResult<Response> {
-        // Create enemies
-        let now = tokio::time::Instant::now();
-        let mut create_enemies = "BEGIN TRANSACTION;".to_string();
-        for enemy in enemies {
-            let serialized = serde_json::to_string(&enemy).unwrap();
-            create_enemies.push_str(&format!("CREATE {} CONTENT {}; ", ENEMY_TABLE, serialized));
-        }
-        create_enemies.push_str("COMMIT TRANSACTION;");
-        let mut created_enemies = DB.query(create_enemies).await?;
-        info!("Created Enemies: {:?}", now.elapsed());
-
-        // Get Enemy Records
-        let record_count = created_enemies.num_statements();
-        let mut record_ids = vec![];
-        for i in 0..record_count {
-            let _take: Option<Record> = created_enemies.take(i).unwrap();
-            let id = _take.unwrap().id;
-            record_ids.push(id);
-        }
-
-        // Relate enemies to player
-        let mut relate = "BEGIN TRANSACTION;".to_string();
-        for record_id in record_ids {
-            relate.push_str(&format!(
-                "relate {}->{}->{}:{}; ",
-                record_id, COMBAT_TABLE, CHARACTER_TABLE, character.user_id
-            ));
-        }
-        relate.push_str(&format!(
-            "delete {} where state != 'Alive' return none;",
-            ENEMY_TABLE
-        ));
-        relate.push_str("COMMIT TRANSACTION;");
-        let groups = DB.query(relate).await?;
-        info!("Relate Enemies: {:?}", now.elapsed());
-        Ok(groups)
-    }
-
-    pub async fn store_related_enemy(
-        character: &Character,
-        enemy: &Enemy,
-        thing: Option<Thing>,
-    ) -> CarrionResult<Response> {
-        let record_id = match thing {
-            Some(thing) => {
-                let record: Option<Record> =
-                    DB.update(thing.clone()).content(enemy.clone()).await?;
-                debug_assert_eq!(record.unwrap().id, thing, "Failed to update enemy");
-                thing
-            }
-            None => {
-                let record: Vec<Record> = DB.create(ENEMY_TABLE).content(enemy.clone()).await?;
-                record.first().unwrap().id.clone()
-            }
-        };
-        let relate = format!(
-            "relate {}->{}->{}:{}; delete {} where state != 'Alive' return none;",
-            record_id, COMBAT_TABLE, CHARACTER_TABLE, character.user_id, ENEMY_TABLE
-        );
-        let groups = DB
-            .query(relate)
-            .await
-            .expect("Failed to relate enemy to user");
-        Ok(groups)
-    }
-
-    pub async fn delete_related(user_id: u64) -> CarrionResult<()> {
-        let sql = format!(
-            "select id from (select id, count(->{}->{}) as fight, array::pop(->{}->{}.user_id) as user_id from {}) where user_id={}",
-            COMBAT_TABLE, CHARACTER_TABLE, COMBAT_TABLE,CHARACTER_TABLE,ENEMY_TABLE, user_id
-        );
-        let mut record: Response = DB.query(sql).await?;
-        let enemy_records: Vec<Record> = record.take(0).unwrap();
-        for record in enemy_records {
-            let _: Option<Enemy> = DB.delete(record.id).await?;
-        }
-        Ok(())
     }
 }
 
@@ -225,7 +199,6 @@ mod test {
     use super::*;
     use crate::database::surreal::consumer::SurrealConsumer;
     use crate::database::surreal::SurrealDB;
-    use crate::enemies::EnemyState;
 
     #[ignore]
     #[tokio::test]
@@ -251,126 +224,5 @@ mod test {
             items_fetch.unwrap().gold,
             (more_gold + gold - negative_gold)
         );
-    }
-
-    #[ignore]
-    #[tokio::test]
-    async fn delete_related_enemies() {
-        SurrealDB::connect("memory").await.unwrap();
-        let user_id = 442792120336777217;
-        let character = Character {
-            user_id,
-            ..Default::default()
-        };
-        let other_character = Character {
-            user_id: 123456789,
-            ..Default::default()
-        };
-
-        let mut enemy = Enemy::default();
-        let mut other_enemy = Enemy::default();
-        other_enemy.gold = 999;
-        enemy.gold = 333;
-
-        SurrealProducer::create_character(character.clone())
-            .await
-            .unwrap();
-
-        SurrealProducer::create_character(other_character.clone())
-            .await
-            .unwrap();
-
-        let _groups = SurrealProducer::store_related_enemy(&character, &enemy, None)
-            .await
-            .unwrap();
-
-        let _groups = SurrealProducer::store_related_enemy(&other_character, &other_enemy, None)
-            .await
-            .unwrap();
-
-        let enemy_records = SurrealConsumer::get_related_enemies(&character)
-            .await
-            .unwrap();
-
-        assert!(enemy_records.is_some());
-
-        SurrealProducer::delete_related(user_id).await.unwrap();
-        let enemy_records = SurrealConsumer::get_related_enemies(&character)
-            .await
-            .unwrap();
-        assert!(enemy_records.is_none());
-
-        let other_enemy_records = SurrealConsumer::get_related_enemies(&other_character)
-            .await
-            .unwrap();
-        assert!(other_enemy_records.is_some());
-    }
-    #[ignore]
-    #[tokio::test]
-    async fn store_enemy_relation_to_user() {
-        SurrealDB::connect("memory").await.unwrap();
-        let user_id = 442792120336777217;
-        let character = Character {
-            user_id,
-            ..Default::default()
-        };
-
-        let mut enemy = Enemy::default();
-        enemy.gold = 333;
-        SurrealProducer::create_character(character.clone())
-            .await
-            .unwrap();
-        let _groups = SurrealProducer::store_related_enemy(&character, &enemy, None)
-            .await
-            .unwrap();
-
-        let enemy_records = SurrealConsumer::get_related_enemies(&character)
-            .await
-            .unwrap();
-        assert!(enemy_records.is_some());
-        assert_eq!(enemy_records.unwrap().0.gold, 333);
-        let mut new_enemy = Enemy::default();
-        new_enemy.gold = 444;
-        SurrealProducer::store_related_enemy(&character, &new_enemy, None)
-            .await
-            .unwrap();
-        let enemy_records = SurrealConsumer::get_related_enemies(&character)
-            .await
-            .unwrap();
-        assert!(enemy_records.is_some());
-    }
-    #[ignore]
-    #[tokio::test]
-    async fn mutate_enemies() {
-        SurrealDB::connect("memory").await.unwrap();
-        let user_id = 442792120336777217;
-        let character = Character {
-            user_id,
-            ..Default::default()
-        };
-        let mut enemy = Enemy::default();
-        enemy.gold = 333;
-        SurrealProducer::create_character(character.clone())
-            .await
-            .unwrap();
-        let _groups = SurrealProducer::store_related_enemy(&character, &enemy, None)
-            .await
-            .unwrap();
-        let (mut enemy, id) = SurrealConsumer::get_related_enemies(&character)
-            .await
-            .unwrap()
-            .unwrap()
-            .clone();
-        enemy.state = EnemyState::Dead;
-        println!("enemy: {:?}", enemy);
-        println!("id: {:?}", id);
-        SurrealProducer::store_related_enemy(&character, &enemy, Some(id))
-            .await
-            .unwrap();
-        let enemies = SurrealConsumer::get_related_enemies(&character)
-            .await
-            .unwrap();
-        println!("enemies: {:?}", enemies);
-        assert!(enemies.is_none());
     }
 }

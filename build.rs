@@ -96,6 +96,8 @@ fn main() -> std::io::Result<()> {
     source_code.push_str("use crate::item_templates::SerialAttributes;\n");
     source_code.push_str("use rand::{Rng, thread_rng};\n");
     source_code.push_str("use crate::enemies::MobGrade;\n");
+    source_code.push_str("use eris_macro::ErisValidEnum;\n");
+    source_code.push_str("use eris_macro::ErisDisplayEmoji;\n");
     source_code.push_str("use std::f64::consts::E;\n");
     for st in &struct_vec {
         let struct_name = st.name.to_pascal_case();
@@ -170,7 +172,7 @@ fn main() -> std::io::Result<()> {
         source_code.push_str("\t}\n");
         source_code.push_str("}\n");
     }
-    source_code.push_str("#[derive(ErisConstructedTemplate, Serialize, Deserialize, Hash, PartialEq, Clone, Copy, Debug, Eq)]\n");
+    source_code.push_str("#[derive(ErisValidEnum,ErisConstructedTemplate,ErisDisplayEmoji, Serialize, Deserialize, Hash, PartialEq, Clone, Copy, Debug, Eq)]\n");
     source_code.push_str("pub enum ItemsWeHave {\n");
     for st in &struct_vec {
         source_code.push_str(&format!("\t{},\n", st.name.to_pascal_case()));
@@ -186,15 +188,16 @@ fn main() -> std::io::Result<()> {
             MobGrade::Weak => 1,
             MobGrade::Normal => 2,
             MobGrade::Strong => 3,
-            MobGrade::Boss => 1000,
+            MobGrade::Boss => 10,
         };
         for _ in 0..attempts {
-            if rng.gen_bool(drop_probability.abs().max(0.01)) {
+            if rng.gen_bool(drop_probability.abs().max(0.1)) {
                 items.insert(ItemsWeHave::generate_random_item().expect(\"Failed to generate item\"));
             };
         }
         items.into_iter().collect()
     }");
+
     source_code.push_str("}\n");
 
     // Define the output file path.

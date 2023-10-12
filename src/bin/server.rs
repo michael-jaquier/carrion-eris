@@ -3,70 +3,16 @@ use std::env;
 use carrion_eris::database::surreal::SurrealDB;
 use carrion_eris::{commands, State};
 
-use poise::{async_trait, serenity_prelude as serenity};
+use poise::serenity_prelude as serenity;
 
-use serenity::client::Context;
-
-use serenity::model::channel::GuildChannel;
-use serenity::model::gateway::Presence;
-use std::sync::atomic::AtomicBool;
 use std::time::Duration;
 
-use serenity::model::id::{ChannelId, GuildId};
+use tracing::debug;
 
-use tokio::time::sleep;
-
-use tracing::{debug, info};
-
-use carrion_eris::battle::all_battle;
+use carrion_eris::game_loop::Handler;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
-
-struct Handler {
-    #[allow(dead_code)]
-    is_loop_running: AtomicBool,
-}
-
-#[async_trait]
-impl serenity::EventHandler for Handler {
-    async fn cache_ready(&self, ctx: Context, _guilds: Vec<GuildId>) {
-        let ctx_clone = ctx.clone();
-        tokio::spawn(async move {
-            loop {
-                sleep(Duration::from_secs(5)).await;
-                let results = all_battle().await;
-                let channel_id = 1152198475925176401;
-
-                let mut menu = String::from("```\n");
-                if results.results.is_empty() {
-                    continue;
-                }
-                menu.push_str("Battle Results:\n");
-                for battle in results.results.iter() {
-                    menu.push_str(&format!("{}\n", battle));
-                }
-                menu += "\n```";
-                let m = ChannelId(channel_id)
-                    .send_message(&ctx_clone.http, |m| m.content(menu))
-                    .await;
-                if let Err(why) = m {
-                    eprintln!("Error sending message: {:?}", why);
-                };
-                SurrealDB::export("eris.db").await;
-            }
-        });
-    }
-
-    async fn presence_update(&self, _ctx: Context, new_data: Presence) {
-        info!("Presence Update: {:?}", new_data);
-    }
-
-    async fn channel_create(&self, _ctx: Context, channel: &GuildChannel) {
-        info!("channel_create");
-        info!("Channel: {:?}", channel);
-    }
-}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -90,9 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let intents =
             serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
         let mut client = serenity::Client::builder(&token, intents)
-            .event_handler(Handler {
-                is_loop_running: AtomicBool::new(false),
-            })
+            .event_handler(Handler {})
             .await
             .expect("Error creating client");
 

@@ -141,6 +141,10 @@ impl Enemy {
         self.experience *= multiple;
         self
     }
+
+    pub fn cost(&self) -> u64 {
+        self.gold * 10 / (self.kind.grade() as u64)
+    }
 }
 
 impl Default for Enemy {

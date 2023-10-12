@@ -488,6 +488,7 @@ dependencies = [
  "dotenv",
  "eris-macro",
  "heck",
+ "lazy_static",
  "once_cell",
  "poise",
  "rand 0.8.5",

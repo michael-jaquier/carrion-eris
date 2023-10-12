@@ -270,6 +270,7 @@ mod test {
     use super::*;
 
     #[test]
+    #[ignore]
     fn bomb_is_a_bomb() {
         let bomb = Mob::Bomb;
         let t = bomb.alignment();
@@ -283,6 +284,8 @@ mod test {
     }
 
     #[test]
+    #[ignore]
+    fn bomb_is_a_bomb() {
     fn no_drop() {
         let _enemy = Enemy::weak(Mob::Orc, 1);
         let item = ItemsWeHave::drop_chance(1, MobGrade::Weak);

@@ -209,6 +209,13 @@ impl Dice {
     pub fn new(dice: Vec<DieObject>) -> Self {
         Self { dice }
     }
+    pub fn len(&self) -> usize {
+        self.dice.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.dice.is_empty()
+    }
 
     pub fn zero() -> Self {
         Self::new(vec![])

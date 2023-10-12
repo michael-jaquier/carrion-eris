@@ -1,10 +1,9 @@
-use crate::database::surreal::{CHARACTER_TABLE, COMBAT_TABLE, DB, ENEMY_TABLE, ITEM_TABLE};
-use crate::enemies::Enemy;
+use crate::database::surreal::{CHARACTER_TABLE, DB, ENEMY_TABLE, ITEM_TABLE, MOB_TABLE};
+use crate::enemies::{Enemy, Mob};
 use crate::items::Items;
 use crate::player::{Character, SkillSet};
-use crate::{CarrionResult, Record};
-use surrealdb::sql::Thing;
-use surrealdb::Response;
+use crate::{CarrionResult, MobQueue};
+
 use tracing::debug;
 
 pub struct SurrealConsumer {}
@@ -27,23 +26,9 @@ impl SurrealConsumer {
         Ok(record)
     }
 
-    pub async fn get_related_enemies(
-        character: &Character,
-    ) -> CarrionResult<Option<(Enemy, Thing)>> {
-        let sql = format!(
-            "select id from (select id, count(->{}->{}) as fight, array::pop(->{}->{}.user_id) as user_id from {}) where user_id={} limit 1",
-            COMBAT_TABLE, CHARACTER_TABLE, COMBAT_TABLE,CHARACTER_TABLE,ENEMY_TABLE, character.user_id
-        );
-
-        let mut record: Response = DB.query(sql).await?;
-        let enemy_records: Option<Record> = record.take(0)?;
-        if let Some(record) = enemy_records {
-            let enemy: Option<Enemy> = DB.select(record.id.clone()).await?;
-            let true_enemy_records = (enemy.expect("No matching record"), record.id.clone());
-            Ok(Option::from(true_enemy_records))
-        } else {
-            Ok(None)
-        }
+    pub async fn get_related_mobs(character: &Character) -> CarrionResult<Vec<Mob>> {
+        let mobs: Option<MobQueue> = DB.select((MOB_TABLE, character.user_id)).await?;
+        Ok(mobs.unwrap_or_default().mobs)
     }
 
     pub async fn get_skill(

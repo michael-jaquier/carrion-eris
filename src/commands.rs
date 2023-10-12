@@ -1,16 +1,19 @@
 use crate::classes::Classes;
 use crate::database::surreal::consumer::SurrealConsumer;
-use crate::database::surreal::producer::SurrealProducer;
+
 use crate::enemies::Mob;
 
 use crate::player::Character;
 use crate::skills::Skill;
 use crate::traits::CharacterTraits;
+use crate::ValidEnum;
 use crate::{Context, Error};
-use crate::{EnemyEvents, ValidEnum};
 
 use crate::items::EquipmentSlot;
 
+use crate::constructed::ItemsWeHave;
+use crate::game::mutations::Mutations;
+use crate::game_loop::{BUFFER, GAME};
 use tracing::{info, warn};
 
 /// Show this help menu
@@ -21,6 +24,9 @@ pub async fn help(
     #[autocomplete = "poise::builtins::autocomplete_command"]
     command: Option<String>,
 ) -> Result<(), Error> {
+    let buffer = BUFFER.read().await;
+
+    println!("{:?}", buffer);
     poise::builtins::help(
         ctx,
         command.as_deref(),
@@ -44,41 +50,17 @@ pub async fn character_trait(
     info!("character_trait input {:?}", character_trait);
     let now = tokio::time::Instant::now();
     let id = ctx.author().id.0;
-    let mut character: Character = SurrealConsumer::get_character(id)
-        .await?
-        .expect("Failed to create character");
-    if character.available_traits == 0 {
-        ctx.reply("You have no traits to spend").await?;
-        return Ok(());
-    }
     if let Some(ctrait) = character_trait {
         let ctrait = CharacterTraits::try_from(ctrait);
         match ctrait {
             Ok(ctrait) => {
-                if !character.traits.insert(ctrait) {
-                    ctx.reply("You already have that trait").await?;
-                    return Ok(());
-                }
-
-                ctrait.attribute_mutator(&mut character.attributes);
-
-                character.available_traits -= 1;
-                let record = SurrealProducer::create_or_update_character(character.clone()).await?;
-                match record {
-                    Some(_record) => {
-                        let created_character = SurrealConsumer::get_character(id)
-                            .await?
-                            .expect("Failed to create character");
-                        ctx.send(|b| {
-                            b.content(format!("Updated character: {}", created_character))
-                                .ephemeral(true)
-                        })
-                        .await?;
-                    }
-                    None => {
-                        ctx.reply("Failed to update character").await?;
-                    }
-                }
+                BUFFER.write().await.add(Mutations::Trait(id, ctrait));
+                BUFFER.write().await.add(Mutations::SynchronizePlayer(id));
+                ctx.reply(format!(
+                    "If the trait is unique will be set soon: {:}",
+                    ctrait
+                ))
+                .await?;
             }
             Err(e) => {
                 ctx.reply(format!(
@@ -108,22 +90,14 @@ pub async fn delete(
     info!("delete_character");
     info!("Command: {:?}", command);
     let now = tokio::time::Instant::now();
-    let e = SurrealProducer::delete_character(ctx.author().id.0).await?;
-    let x = SurrealProducer::drop_character_skills(ctx.author().id.0).await?;
-    SurrealProducer::delete_related(ctx.author().id.0).await?;
-    info!(?e, ?x, "delete_character");
-    match e {
-        None => {
-            ctx.reply("No character to delete").await?;
-            info!("delete_character finish {:?}", now.elapsed());
-            Ok(())
-        }
-        Some(_e) => {
-            ctx.reply("Deleted character").await?;
-            info!("delete_character finish {:?}", now.elapsed());
-            Ok(())
-        }
-    }
+    BUFFER
+        .write()
+        .await
+        .add(Mutations::Delete(ctx.author().id.0));
+
+    ctx.reply("Deleted character").await?;
+    info!("delete_character finish {:?}", now.elapsed());
+    Ok(())
 }
 
 /// Create your character using a class
@@ -144,23 +118,12 @@ pub async fn create(
                 let name = ctx.author().name.clone();
                 let id = ctx.author().id.0;
                 let new_character = Character::new(name, id, class);
-                let record = SurrealProducer::create_character(new_character).await?;
-                match record {
-                    Some(_record) => {
-                        let created_character = SurrealConsumer::get_character(id)
-                            .await?
-                            .expect("Failed to create character");
-                        ctx.send(|b| {
-                            b.content(format!("Created character: {}", created_character))
-                                .ephemeral(true)
-                        })
-                        .await?;
-                    }
-                    None => {
-                        ctx.send(|b| b.content("Failed to create character").ephemeral(true))
-                            .await?;
-                    }
-                }
+                ctx.send(|b| {
+                    b.content(format!("Created character: {}", new_character))
+                        .ephemeral(true)
+                })
+                .await?;
+                BUFFER.write().await.add(Mutations::Create(new_character));
             }
             Err(_) => {
                 let valid_classes = Classes::valid();
@@ -199,7 +162,9 @@ pub async fn me(
 ) -> Result<(), Error> {
     let now = tokio::time::Instant::now();
     let user_id = ctx.author().id.0;
-    let character = SurrealConsumer::get_character(user_id).await?;
+    info!("me start");
+    let character = GAME.clone().read().await.get_character(user_id);
+    info!("me get_character");
     match character {
         Some(character) => {
             ctx.send(|b| {
@@ -213,7 +178,12 @@ pub async fn me(
                 .await?;
         }
     }
+    BUFFER
+        .write()
+        .await
+        .add(Mutations::SynchronizePlayer(user_id));
     info!("me finish {:?}", now.elapsed());
+
     Ok(())
 }
 
@@ -232,35 +202,18 @@ pub async fn skill(
             let skill = Skill::try_from(command);
             match skill {
                 Ok(skill) => {
-                    let has_skill = SurrealConsumer::get_skill_id(user_id, skill.clone() as u64)
+                    BUFFER.write().await.add(Mutations::Skill(user_id, skill));
+                    BUFFER
+                        .write()
                         .await
-                        .expect("Failed to get skill");
-                    match has_skill {
-                        Some(skill) => {
-                            let set_skill = SurrealProducer::set_current_skill_id(skill, user_id)
-                                .await
-                                .expect("Failed to set skill");
-
-                            ctx.send(|b| {
-                                b.content(format!("Skill set: {:}", set_skill))
-                                    .ephemeral(true)
-                            })
-                            .await?;
-                        }
-                        None => {
-                            let set_skill =
-                                SurrealProducer::set_current_skill_id(skill.into(), user_id)
-                                    .await
-                                    .expect("Failed to set skill");
-                            let _valid_skills = Skill::valid();
-                            ctx.send(|b| {
-                                b.content(format!("Skill set: {:}\n", set_skill))
-                                    .ephemeral(true)
-                            })
-                            .await?;
-                        }
-                    }
+                        .add(Mutations::SynchronizeSkills(user_id));
+                    ctx.send(|b| {
+                        b.content(format!("Skill set: {:}\n", skill))
+                            .ephemeral(true)
+                    })
+                    .await?;
                 }
+
                 Err(err) => {
                     warn!("Invalid skill: {:?}", err);
                     ctx.send(|b| {
@@ -277,11 +230,7 @@ pub async fn skill(
         }
         None => {
             let valid_skills = Skill::valid();
-            let current_skill = SurrealConsumer::get_current_skill(user_id).await?;
             let mut responses = String::new();
-            if let Some(current_skill) = current_skill {
-                responses.push_str(&format!("Current Skill: {}\n", current_skill));
-            }
             responses.push_str(&format!("Valid Skills:\n {}", valid_skills));
             ctx.send(|b| b.content(responses).ephemeral(true)).await?;
         }
@@ -299,20 +248,24 @@ pub async fn sell(
 ) -> Result<(), Error> {
     let now = tokio::time::Instant::now();
     let user_id = ctx.author().id.0;
-    let items = SurrealConsumer::get_items(user_id).await?;
-    if items.is_none() {
-        ctx.send(|b| b.content("No items found").ephemeral(true))
-            .await?;
-        return Ok(());
-    }
-    let mut items = items.unwrap();
     if let Some(slot) = slot {
         let slot = EquipmentSlot::try_from(slot);
         match slot {
             Ok(slot) => {
-                items.sell(Some(slot));
-                ctx.send(|b| b.content(format!("{}", items)).ephemeral(true))
-                    .await?;
+                let current_items = SurrealConsumer::get_items(user_id).await?;
+                ctx.send(|b| {
+                    b.content(format!("Selling all items of type: {}", slot))
+                        .ephemeral(true)
+                })
+                .await?;
+                BUFFER
+                    .write()
+                    .await
+                    .add(Mutations::Sell(user_id, Some(slot), current_items));
+                BUFFER
+                    .write()
+                    .await
+                    .add(Mutations::SynchronizeItems(user_id));
             }
 
             Err(_) => {
@@ -328,13 +281,14 @@ pub async fn sell(
             }
         };
     } else {
-        let items = items.sell(None);
-        ctx.send(|b| b.content(format!("{}", items)).ephemeral(true))
+        ctx.send(|b| b.content("Selling all items").ephemeral(true))
             .await?;
+        let current_items = SurrealConsumer::get_items(user_id).await?;
+        BUFFER
+            .write()
+            .await
+            .add(Mutations::Sell(user_id, None, current_items));
     }
-    SurrealProducer::store_user_items(items, user_id)
-        .await
-        .expect("Failed to store items");
     info!("sell finish {:?}", now.elapsed());
     Ok(())
 }
@@ -404,39 +358,32 @@ pub async fn equip(
 ) -> Result<(), Error> {
     let now = tokio::time::Instant::now();
     if let Some(item) = item {
-        let user_id = ctx.author().id.0;
-        let items = SurrealConsumer::get_items(user_id).await?;
-        if items.is_none() {
-            ctx.send(|b| b.content("No items found").ephemeral(true))
-                .await?;
-            info!("equip finish {:?}", now.elapsed());
-            return Ok(());
-        }
-        let mut items = items.unwrap();
-        let selected_item = items.take(item);
-        if selected_item.is_none() {
-            ctx.send(|b| b.content("Item to equip not found").ephemeral(true))
-                .await?;
-            info!("equip finish {:?}", now.elapsed());
-            return Ok(());
-        }
-        let mut character = SurrealConsumer::get_character(user_id)
-            .await?
-            .expect("Failed to get character");
-
-        let old_item = character.equipment.equip(selected_item.unwrap());
-        if let Some(old_item) = old_item {
-            items.push(old_item);
-            SurrealProducer::store_user_items(items, user_id)
-                .await
-                .expect("Failed to store items");
-        }
-
-        SurrealProducer::create_or_update_character(character).await?;
         ctx.send(|b| b.content("Equipped item").ephemeral(true))
             .await?;
+        let user_id = ctx.author().id.0;
+        let item = ItemsWeHave::try_from(item);
+        match item {
+            Ok(item) => {
+                BUFFER.write().await.add(Mutations::Equip(user_id, item));
+                BUFFER
+                    .write()
+                    .await
+                    .add(Mutations::SynchronizeItems(user_id));
+                info!("equip finish {:?}", now.elapsed());
+            }
+            Err(_) => {
+                ctx.send(|b| {
+                    b.content(format!(
+                        "Invalid item: {:?}\n Valid Items:\n {}",
+                        item,
+                        ItemsWeHave::valid()
+                    ))
+                    .ephemeral(true)
+                })
+                .await?;
+            }
+        }
     }
-    info!("equip finish {:?}", now.elapsed());
     Ok(())
 }
 
@@ -458,102 +405,35 @@ pub async fn battle(
             ctx.send(|b| b.content(valid_enemy).ephemeral(true)).await?;
         }
         Some(command) => {
-            let n = num_entries.unwrap_or(1);
-            let mut total_battle_cost = 0;
-            let mut total_fights = 0;
-            match Mob::try_from(command.clone()) {
-                Ok(mob) => {
-                    let gold = SurrealConsumer::get_items(user_id).await?;
-                    match gold {
-                        None => {
-                            ctx.send(|b| {
-                                b.content("You have no gold to spend on a battle")
-                                    .ephemeral(true)
-                            })
-                            .await?;
-                        }
-                        Some(gold) => {
-                            let old_gold = gold.gold as i128;
-                            let mut gold = gold.gold as i128;
-                            let character = SurrealConsumer::get_character(user_id)
-                                .await?
-                                .expect("Failed to get character");
-                            let gen_enemy = || mob.generate(&character);
-                            let mut vec_enemys = vec![];
-                            for _ in 0..n {
-                                let enemy = gen_enemy();
-                                let cost = (enemy.gold * 3) / enemy.kind.grade() as u64;
-                                gold -= cost as i128;
-                                if gold < 0 {
-                                    gold += cost as i128;
-                                    break;
-                                }
-                                vec_enemys.push(enemy);
-                            }
-                            if vec_enemys.is_empty() {
-                                ctx.send(|b| {
-                                    b.content(format!(
-                                        "You do not have enough gold to battle a {}",
-                                        Mob::try_from(command.clone()).unwrap()
-                                    ))
-                                    .ephemeral(true)
-                                })
-                                .await?;
-                                info!("battle finish {:?}", now.elapsed());
-                                return Ok(());
-                            }
-                            total_battle_cost = old_gold - gold;
-                            total_fights = vec_enemys.len();
-                            SurrealProducer::store_related_enemies(&character, vec_enemys)
-                                .await
-                                .expect("Failed to store enemy");
-
-                            SurrealProducer::patch_user_gold(
-                                total_battle_cost as u64,
-                                user_id,
-                                true,
-                            )
-                            .await
-                            .expect("Failed to patch gold");
-                        }
-                    }
-                }
-                Err(huh) => {
+            let enemy = Mob::try_from(command);
+            match enemy {
+                Ok(enemy) => {
                     ctx.send(|b| {
-                        b.content(format!("Invalid enemy: {:}", huh))
+                        b.content(format!("Battle queued: {:}", enemy))
                             .ephemeral(true)
+                    })
+                    .await?;
+                    BUFFER.write().await.add(Mutations::AddEnemy(
+                        user_id,
+                        enemy,
+                        num_entries.unwrap_or(1),
+                    ));
+                }
+                Err(_) => {
+                    ctx.send(|b| {
+                        b.content(format!(
+                            "Invalid enemy: {:?}\n Valid Enemies:\n {}",
+                            enemy,
+                            Mob::valid()
+                        ))
+                        .ephemeral(true)
                     })
                     .await?;
                 }
             }
-
-            if total_battle_cost > 0 {
-                let mut response = String::new();
-                response.push('`');
-                response.push_str(&format!(
-                    "You spent {} gold to battle {} {}'s\n",
-                    total_battle_cost,
-                    total_fights,
-                    Mob::try_from(command.clone()).unwrap()
-                ));
-                response.push_str(&format!(
-                    "Your enemy: {} was added to your battle queue\n",
-                    Mob::try_from(command.clone()).unwrap()
-                ));
-                response.push('`');
-                ctx.send(|b| b.content(response).ephemeral(true)).await?;
-            } else {
-                ctx.send(|b| {
-                    b.content(format!(
-                        "You do not have enough gold to battle a {}",
-                        Mob::try_from(command.clone()).unwrap()
-                    ))
-                    .ephemeral(true)
-                })
-                .await?;
-            }
         }
-    }
+    };
+
     info!("battle finish {:?}", now.elapsed());
     Ok(())
 }

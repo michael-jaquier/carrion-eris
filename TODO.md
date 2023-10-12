@@ -3,6 +3,7 @@
 
 # Code
 * Ensure all calls to the db are localized to a single file/abstracted to a certain extent
+* Add a multiplier based on "game speed" used for drop.exp.gold.etc
 
 # Traits
 * Traits that interact with things like hp ( vampire etc. )

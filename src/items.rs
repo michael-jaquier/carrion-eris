@@ -1,10 +1,14 @@
 use crate::dice::Dice;
 
 use crate::units::{Attributes, DamageType};
+use crate::BattleInfo;
 use eris_macro::{ErisDisplayEmoji, ErisValidEnum};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
+use std::collections::hash_set::Iter;
+use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
+use std::hash::Hash;
+use std::ops::AddAssign;
 
 use crate::constructed::ItemsWeHave;
 
@@ -63,17 +67,60 @@ impl From<String> for Rarity {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, Default)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Default)]
 pub struct Items {
-    items: Vec<ItemsWeHave>,
+    items: HashSet<ItemsWeHave>,
     pub(crate) gold: u64,
 }
 
-impl Items {
-    pub fn push(&mut self, item: ItemsWeHave) {
-        self.items.push(item);
+impl From<&BattleInfo> for Items {
+    fn from(battle_info: &BattleInfo) -> Self {
+        let mut gold = battle_info.gold_gained;
+        let mut items = HashSet::new();
+        for item in battle_info.item_gained.clone() {
+            match items.insert(item) {
+                true => {
+                    gold += item.generate().value;
+                }
+                false => {}
+            }
+        }
+        Self { items, gold }
     }
-    pub fn iter(&self) -> std::slice::Iter<'_, ItemsWeHave> {
+}
+
+impl AddAssign for Items {
+    fn add_assign(&mut self, rhs: Self) {
+        self.gold += rhs.gold;
+        for item in rhs.items {
+            match self.items.insert(item) {
+                true => {
+                    self.gold += item.generate().value;
+                }
+                false => {}
+            }
+        }
+    }
+}
+
+impl Items {
+    pub fn new(items: HashSet<ItemsWeHave>, gold: u64) -> Self {
+        Self { items, gold }
+    }
+
+    pub fn remove(&mut self, item: &ItemsWeHave) -> bool {
+        self.items.remove(item)
+    }
+
+    pub fn push(&mut self, item: ItemsWeHave) {
+        match { self.items.insert(item) } {
+            true => {
+                self.gold += item.generate().value;
+            }
+            false => {}
+        }
+    }
+    pub fn iter(&self) -> Iter<'_, ItemsWeHave> {
         self.items.iter()
     }
 
@@ -90,22 +137,17 @@ impl Items {
         }
     }
 
-    pub fn contains(&self, have_item: String) -> Option<ItemsWeHave> {
+    pub fn take(&mut self, have_item: String) -> Option<ItemsWeHave> {
+        let mut item_to_return = None;
         for item in &self.items {
             if item.generate().name == have_item {
-                return Some(*item);
+                item_to_return = Some(*item);
             }
         }
-        None
-    }
-
-    pub fn take(&mut self, have_item: String) -> Option<ItemsWeHave> {
-        for (index, item) in self.items.iter().enumerate() {
-            if item.generate().name == have_item {
-                return Some(self.items.remove(index));
-            }
+        if let Some(item_to_return) = item_to_return {
+            self.items.remove(&item_to_return);
         }
-        None
+        item_to_return
     }
 
     pub fn sell(&mut self, slot: Option<EquipmentSlot>) -> &mut Items {
@@ -124,6 +166,39 @@ impl Items {
         }
         self
     }
+
+    pub fn sell_with_knowledge(
+        &mut self,
+        slot: Option<&EquipmentSlot>,
+        known_items: Option<&Items>,
+    ) {
+        let known: Option<HashSet<_>> = known_items.map(|known| {
+            self.items
+                .drain()
+                .filter(|item| !known.items.contains(item))
+                .collect()
+        });
+
+        if let Some(slot) = slot {
+            for item in &self.items {
+                if item.generate().slot == *slot {
+                    self.gold += item.generate().value;
+                }
+            }
+            self.items.retain(|item| item.generate().slot != *slot);
+        } else {
+            for item in &self.items {
+                self.gold += item.generate().value;
+            }
+            self.items.clear();
+        }
+
+        if let Some(known) = known {
+            known.iter().for_each(|item| {
+                self.items.insert(*item);
+            });
+        }
+    }
 }
 
 impl Display for Items {
@@ -139,7 +214,7 @@ impl Display for Items {
         let mut rings = EquipmentSlot::Ring.to_string();
         let mut weapons = EquipmentSlot::Weapon.to_string();
         let mut shields = EquipmentSlot::Shield.to_string();
-        let mut wonderous_items = EquipmentSlot::WondrousItem.to_string();
+        let mut wondrous_items = EquipmentSlot::WondrousItem.to_string();
 
         for item in &self.items {
             let slot = item.generate().slot;
@@ -181,8 +256,8 @@ impl Display for Items {
                     amulets.push_str(&item.generate().name);
                 }
                 EquipmentSlot::WondrousItem => {
-                    wonderous_items.push_str("\n\t\t⮁\t");
-                    wonderous_items.push_str(&item.generate().name);
+                    wondrous_items.push_str("\n\t\t⮁\t");
+                    wondrous_items.push_str(&item.generate().name);
                 }
             }
         }
@@ -223,9 +298,9 @@ impl Display for Items {
             string.push('\n');
             string.push_str(&amulets);
         }
-        if wonderous_items.len() > EquipmentSlot::WondrousItem.to_string().len() {
+        if wondrous_items.len() > EquipmentSlot::WondrousItem.to_string().len() {
             string.push('\n');
-            string.push_str(&wonderous_items);
+            string.push_str(&wondrous_items);
         }
 
         string.push('\n');

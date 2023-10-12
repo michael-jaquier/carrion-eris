@@ -2,7 +2,9 @@ use crate::dice::{AdvantageState, Dice, Die};
 use crate::enemies::Enemy;
 use crate::player::ActionDice;
 use crate::units::{Attribute, Attributes, DamageType};
-use crate::{log_power_scale, sub_linear_scaling, AttributeScaling, ElementalScaling};
+use crate::{
+    ln_power_scaling, log_power_scale, sub_linear_scaling, AttributeScaling, ElementalScaling,
+};
 use eris_macro::{AttributeScaling, ElementalScaling, ErisDisplayEmoji, ErisValidEnum};
 use serde::{Deserialize, Serialize};
 
@@ -16,6 +18,7 @@ use serde::{Deserialize, Serialize};
     ElementalScaling,
     ErisValidEnum,
     ErisDisplayEmoji,
+    Copy,
 )]
 pub enum Skill {
     #[stat("strength")]
@@ -82,6 +85,10 @@ pub enum Skill {
     #[element("prismatic")]
     #[emoji("🌀")]
     Mesmerize,
+    #[stat("charisma")]
+    #[element("fire")]
+    #[emoji("🔥")]
+    Excoriate,
     #[stat("dexterity")]
     #[element("arcane")]
     #[emoji("🔮")]
@@ -331,13 +338,43 @@ impl MobAction {
 
                 DamageType::Prismatic => {}
                 DamageType::Healing => {
-                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 15]));
+                    base_die.magical = Some(Dice::new(vec![Die::D20.into(); 4]));
                 }
             }
         }
     }
 
     fn level_scaling(&self, level: u32, base_die: &mut ActionDice) {
+        match ElementalScaling::scaling(self) {
+            None => {}
+            Some(dtype) => match dtype {
+                DamageType::Fire => {}
+                DamageType::Water => {}
+                DamageType::Earth => {}
+                DamageType::Air => {}
+                DamageType::Light => {}
+                DamageType::Dark => {}
+                DamageType::Iron => {}
+                DamageType::Arcane => {}
+                DamageType::Holy => {}
+                DamageType::NonElemental => {}
+                DamageType::Physical => {}
+                DamageType::Hope => {}
+                DamageType::Despair => {}
+                DamageType::Existential => {}
+                DamageType::Boss => base_die.add_existing_die(vec![
+                    Die::D12.into();
+                    ln_power_scaling(level, Some(3.0))
+                        as usize
+                ]),
+                DamageType::Prismatic => {}
+                DamageType::Healing => base_die.add_existing_die(vec![
+                    Die::D20.into();
+                    ln_power_scaling(level.saturating_sub(10), Some(3.0))
+                        as usize
+                ]),
+            },
+        }
         base_die.add_existing_die(vec![Die::D12.into(); sub_linear_scaling(level) as usize]);
     }
     pub fn act(&self, enemy: &Enemy) -> ActionDice {
@@ -346,5 +383,24 @@ impl MobAction {
         self.elemental(base_die);
         self.level_scaling(enemy.level, base_die);
         base_die.clone()
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::classes::Classes::Paladin;
+    use crate::enemies::Mob;
+    use crate::player::{Character, SkillSet};
+    use rand::random;
+
+    #[test]
+    fn slash_damage_within_range() {
+        let me = Character::new("sdf".to_string(), 23, Paladin);
+        let skill = crate::skills::Skill::Slash;
+        let skill_set = SkillSet::new(skill);
+        let mob: Mob = random();
+        let enemy = mob.generate(&me);
+        let damage = skill_set.act(&me, &enemy);
+        assert!(damage < 150, "Damage was {}", damage);
     }
 }

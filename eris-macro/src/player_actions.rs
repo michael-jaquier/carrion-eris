@@ -109,12 +109,24 @@ pub fn eris_emoji(ast: &DeriveInput) -> TokenStream2 {
                 str.push_str(&f);
                 enum_string.insert(variant.ident.clone(), str.to_string());
             } else {
-                enum_string.entry(variant.ident.clone()).or_insert_with(|| {
-                    let mut str = String::new();
-                    str.push_str(&variant.ident.to_string().to_title_case());
-                    str.to_string()
-                });
+                if enum_string.contains_key(&variant.ident) {
+                    continue;
+                }
+                enum_string.insert(
+                    variant.ident.clone(),
+                    variant.ident.to_string().to_title_case(),
+                );
             }
+        }
+
+        if variant.attrs.is_empty() {
+            if enum_string.contains_key(&variant.ident) {
+                continue;
+            }
+            enum_string.insert(
+                variant.ident.clone(),
+                variant.ident.to_string().to_title_case(),
+            );
         }
     }
 
@@ -133,6 +145,7 @@ pub fn eris_emoji(ast: &DeriveInput) -> TokenStream2 {
                 use #name::*;
                 match self {
                      #(#key_vector => write!(f, "{}", #value_vector),)*
+                    _ => panic!("Unable to parse {} from {:?}", stringify!(#name), self)
                 }
             }
         }
@@ -192,6 +205,7 @@ pub fn eris_valid_try(ast: &DeriveInput) -> TokenStream2 {
                 let d = [#(#ee),*];
                 let d_strings = d.iter().map(|x| x.to_string().to_snake_case()).collect::<Vec<String>>();
                 let index = d_strings.iter().position(|x| x == &value.to_snake_case());
+
                 match index {
                     Some(i) => Ok(d[i].clone()),
                     None => Err(format!("Unable to parse {} from {}", stringify!(#name), value))

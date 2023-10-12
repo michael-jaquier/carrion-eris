@@ -15,6 +15,8 @@ static DB: Lazy<Surreal<Any>> = Lazy::new(Surreal::init);
 pub static CHARACTER_TABLE: &str = "characters";
 pub static ENEMY_TABLE: &str = "enemies";
 
+pub static MOB_TABLE: &str = "mobs";
+
 pub static ITEM_TABLE: &str = "items";
 
 pub static SKILL_TABLE: &str = "skills";

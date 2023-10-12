@@ -5,6 +5,8 @@ pub mod constructed;
 pub mod database;
 pub mod dice;
 pub mod enemies;
+mod game;
+pub mod game_loop;
 pub mod item_templates;
 pub mod items;
 pub mod mutators;
@@ -14,6 +16,7 @@ pub mod traits;
 pub mod units;
 
 // Custom user data passed to all command functions
+#[derive(Debug)]
 pub struct State {}
 type CarrionResult<T> = Result<T, CarrionError>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
@@ -27,7 +30,7 @@ use thiserror::Error;
 
 use skills::Skill;
 
-use crate::enemies::Enemy;
+use crate::enemies::{Enemy, Mob};
 use crate::player::Character;
 
 use std::fmt::{Display, Formatter};
@@ -52,17 +55,23 @@ pub struct Record {
     pub id: Thing,
 }
 
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct MobQueue {
+    pub(crate) mobs: Vec<Mob>,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BattleInfo {
     pub action: Skill,
     pub enemy_action: String,
     pub damage_dealt: i32,
     pub damage_taken: i32,
-    pub healing_done: i32,
-    pub healing_taken: i32,
+    pub player_healing: i32,
+    pub enemy_healing: i32,
     pub player_name: String,
     pub monster_name: String,
-    pub kill: bool,
+    pub player_killed: bool,
+    pub enemy_killed: bool,
     pub critical: bool,
     pub leveled_up: bool,
     pub monster_hp: i32,
@@ -72,6 +81,8 @@ pub struct BattleInfo {
     pub skill_experience_gained: u32,
     pub gold_gained: u64,
     pub item_gained: Vec<ItemsWeHave>,
+    pub number_of_player_attacks: i32,
+    pub number_of_enemy_attacks: i32,
 }
 
 impl BattleInfo {
@@ -81,11 +92,12 @@ impl BattleInfo {
             enemy_action: "".to_string(),
             damage_dealt: 0,
             damage_taken: 0,
-            healing_done: 0,
-            healing_taken: 0,
+            player_healing: 0,
+            enemy_healing: 0,
             player_name: character.name.clone(),
             monster_name: enemy.kind.to_string(),
-            kill: false,
+            player_killed: false,
+            enemy_killed: false,
             critical: false,
             leveled_up: false,
             monster_hp: enemy.health,
@@ -95,6 +107,8 @@ impl BattleInfo {
             skill_experience_gained: 0,
             gold_gained: 0,
             item_gained: vec![],
+            number_of_player_attacks: 0,
+            number_of_enemy_attacks: 0,
         }
     }
 }
@@ -116,6 +130,20 @@ impl Display for BattleInfo {
         string.push_str("\t🎲");
         string.push_str("\n\t");
 
+        if self.number_of_player_attacks > 0 {
+            string.push_str("🎲\t");
+            string.push_str("Average damage per hit");
+            string.push_str(" is ");
+            string.push_str(
+                &self
+                    .damage_dealt
+                    .saturating_div(self.number_of_player_attacks)
+                    .to_string(),
+            );
+            string.push_str("\t🎲");
+            string.push_str("\n\t");
+        }
+
         string.push_str("🪨\t");
         string.push_str("Next level in ");
         string.push_str(&self.next_level.to_string());
@@ -136,7 +164,7 @@ impl Display for BattleInfo {
             string.push_str("\t🎲");
         }
 
-        if self.healing_taken > 0 {
+        if self.enemy_healing > 0 {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str(&self.monster_name);
@@ -145,7 +173,7 @@ impl Display for BattleInfo {
             string.push_str(" with ");
             string.push_str(&self.enemy_action.to_string());
             string.push_str(" regenerating ");
-            string.push_str(&self.healing_taken.to_string());
+            string.push_str(&self.enemy_healing.to_string());
             string.push_str(" health!");
             string.push_str("\t🎲");
         }
@@ -222,6 +250,11 @@ pub fn ln_power_power_power_scale(n: u32) -> u32 {
     let n = n as f64;
     let default_scale = |n: f64| 2.5_f64.powf(n + 3.0).ln() * (n + 10.0).powf(2.1);
     default_scale(n) as u32
+}
+
+pub fn ln_power_scaling(n: u32, power: Option<f64>) -> u32 {
+    let n = n as f64;
+    n.ln().powf(power.unwrap_or(2.0)) as u32
 }
 
 pub fn exp_scaling(n: u32) -> u64 {

@@ -1,6 +1,7 @@
 use crate::battle::BattleResult;
-use crate::database::surreal::consumer::SurrealConsumer;
-use crate::database::surreal::producer::SurrealProducer;
+use crate::database::{Consumer, Database};
+use crate::{database::Producer, items::Items};
+
 use crate::enemies::Mob;
 use crate::game::character_data::CharacterData;
 use crate::game::mutations::Mutations;
@@ -11,20 +12,26 @@ use rand::random;
 use std::collections::HashMap;
 use tracing::{info, warn};
 
-#[derive(Default)]
 pub struct GameData {
     pub characters: HashMap<u64, CharacterData>,
+    producer: Box<dyn Producer + Sync + Send>,
+    consumer: Box<dyn Consumer + Sync + Send>,
+    database: Database,
+}
+
+impl Default for GameData {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl GameData {
     pub async fn init(&mut self) {
-        let characters = SurrealConsumer::get_all_characters()
-            .await
-            .unwrap_or_default();
+        let characters = self.consumer.get_all_characters().await.unwrap_or_default();
 
         let mut game_data = HashMap::new();
         for c in characters {
-            let character_data = CharacterData::init(&c).await;
+            let character_data = CharacterData::init(&c, Database::Surreal).await;
             game_data.insert(c.user_id, character_data);
         }
         self.characters = game_data;
@@ -32,13 +39,21 @@ impl GameData {
     }
 
     pub fn new() -> Self {
+        let database = Database::Surreal;
         Self {
             characters: HashMap::new(),
+            producer: database.get_producer(),
+            consumer: database.get_consumer(),
+            database,
         }
     }
 
     pub fn get_character(&self, user_id: u64) -> Option<Character> {
         self.characters.get(&user_id).map(|c| c.character.clone())
+    }
+
+    pub fn get_items(&self, user_id: u64) -> Option<Items> {
+        self.characters.get(&user_id).map(|c| c.items.clone())
     }
 
     fn activate_enemies(&mut self) {
@@ -99,23 +114,23 @@ impl GameData {
             match mutation {
                 Mutations::Delete(user_id) => {
                     self.characters.remove(user_id);
-                    let _ = SurrealProducer::delete_character(*user_id)
-                        .await
-                        .map_err(|e| {
-                            warn!("Failed to delete character: {:?}", e);
-                        });
-                    let _ = SurrealProducer::drop_character_skills(*user_id)
+                    let _ = self.producer.delete_character(*user_id).await.map_err(|e| {
+                        warn!("Failed to delete character: {:?}", e);
+                    });
+                    let _ = self
+                        .producer
+                        .delete_character_skills(*user_id)
                         .await
                         .map_err(|e| {
                             warn!("Failed to delete character skills: {:?}", e);
                         });
-                    let _ = SurrealProducer::delete_mob_queue(*user_id)
-                        .await
-                        .map_err(|e| {
-                            warn!("Failed to delete related: {:?}", e);
-                        });
+                    let _ = self.producer.delete_mob_queue(*user_id).await.map_err(|e| {
+                        warn!("Failed to delete related: {:?}", e);
+                    });
 
-                    let _ = SurrealProducer::delete_user_items(*user_id)
+                    let _ = self
+                        .producer
+                        .delete_user_items(*user_id)
                         .await
                         .map_err(|e| {
                             warn!("Failed to delete user items: {:?}", e);
@@ -125,9 +140,11 @@ impl GameData {
                 }
 
                 Mutations::Create(character) => {
-                    let character_data = CharacterData::init(character).await;
+                    let character_data = CharacterData::init(character, self.database).await;
                     self.characters.insert(character.user_id, character_data);
-                    let _ = SurrealProducer::create_character(character.clone())
+                    let _ = self
+                        .producer
+                        .create_character(character.clone())
                         .await
                         .map_err(|e| {
                             warn!("Failed to store character: {:?}", e);
@@ -143,14 +160,13 @@ impl GameData {
                         continue;
                     }
                     let character = character.unwrap();
-                    let _ = SurrealProducer::store_mob_queue(
-                        &character.character,
-                        character.enemies.clone(),
-                    )
-                    .await
-                    .map_err(|e| {
-                        warn!("Failed to store enemies: {:?}", e);
-                    });
+                    let _ = self
+                        .producer
+                        .store_mob_queue(&character.character, character.enemies.clone())
+                        .await
+                        .map_err(|e| {
+                            warn!("Failed to store enemies: {:?}", e);
+                        });
                     info!("Stored enemies in {:?}", now.elapsed());
                 }
 
@@ -161,7 +177,9 @@ impl GameData {
                         continue;
                     }
                     let character = character.unwrap();
-                    let _ = SurrealProducer::store_user_items(character.items.clone(), *user_id)
+                    let _ = self
+                        .producer
+                        .store_user_items(character.items.clone(), *user_id)
                         .await
                         .map_err(|e| {
                             warn!("Failed to store items: {:?}", e);
@@ -193,7 +211,9 @@ impl GameData {
         for character_data in self.characters.values() {
             let character = character_data.character.clone();
 
-            let _ = SurrealProducer::create_or_update_character(character)
+            let _ = self
+                .producer
+                .create_or_update_character(character)
                 .await
                 .map_err(|e| {
                     warn!("Failed to update character: {:?}", e);

@@ -1,6 +1,5 @@
 use crate::constructed::ItemsWeHave;
-use crate::database::surreal::consumer::SurrealConsumer;
-use crate::database::surreal::producer::SurrealProducer;
+use crate::database::{Consumer, Database, Producer};
 use crate::enemies::{Enemy, Mob};
 use crate::game::mutations::Mutations;
 use crate::game_loop::BUFFER;
@@ -16,17 +15,24 @@ pub struct CharacterData {
     pub items: Items,
     pub user_id: u64,
     pub active_enemy: Option<Enemy>,
+    producer: Box<dyn Producer + Sync + Send>,
+    consumer: Box<dyn Consumer + Sync + Send>,
 }
 
 impl CharacterData {
-    pub async fn init(character: &Character) -> CharacterData {
-        let items = SurrealConsumer::get_items(character.user_id)
+    pub async fn init(character: &Character, database: Database) -> CharacterData {
+        let producer = database.get_producer();
+        let consumer = database.get_consumer();
+        let items = consumer
+            .get_items(character.user_id)
             .await
             .unwrap_or_default();
-        let enemies = SurrealConsumer::get_related_mobs(character)
+        let enemies = consumer
+            .get_related_mobs(character)
             .await
             .expect("Unable to get related enemies from DB");
-        let active_enemy = SurrealConsumer::get_enemy(character)
+        let active_enemy = consumer
+            .get_enemy(character)
             .await
             .expect("Unable to get active enemy from DB");
 
@@ -39,36 +45,39 @@ impl CharacterData {
             items: items.unwrap_or(Items::default()),
             user_id: character.user_id,
             active_enemy,
+            consumer,
+            producer,
         }
     }
 
     pub async fn apply_mutation(&mut self, mutation: Mutations) {
         match mutation {
             Mutations::Skill(_, skill) => {
-                let _ = SurrealProducer::create_or_update_skill(
-                    self.character.current_skill.clone(),
-                    &self.character,
-                )
-                .await
-                .map_err(|e| {
-                    warn!("Failed to update skill: {:?}", e);
-                });
+                let _ = self
+                    .producer
+                    .create_or_update_skill(
+                        self.character.current_skill.clone(),
+                        self.character.user_id,
+                    )
+                    .await
+                    .map_err(|e| {
+                        warn!("Failed to update skill: {:?}", e);
+                    });
                 if let Ok(Some(known_skill)) =
-                    SurrealConsumer::get_skill(&self.character, skill as u64).await
+                    self.consumer.get_skill(&self.character, skill as u64).await
                 {
                     self.character.current_skill = known_skill;
                 } else {
                     self.character.current_skill = SkillSet::new(skill);
                 }
 
-                let _ = SurrealProducer::set_current_skill(
-                    self.character.current_skill.clone(),
-                    &self.character,
-                )
-                .await
-                .map_err(|e| {
-                    warn!("Failed to set current skill: {:?}", e);
-                });
+                let _ = self
+                    .producer
+                    .set_current_skill(self.character.current_skill.clone(), self.character.user_id)
+                    .await
+                    .map_err(|e| {
+                        warn!("Failed to set current skill: {:?}", e);
+                    });
             }
 
             Mutations::Equip(user_id, item) => {

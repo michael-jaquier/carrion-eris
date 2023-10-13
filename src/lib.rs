@@ -1,6 +1,7 @@
 pub mod battle;
 pub mod classes;
 pub mod commands;
+#[rustfmt::skip]
 pub mod constructed;
 pub mod database;
 pub mod dice;

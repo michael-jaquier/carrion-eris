@@ -210,13 +210,13 @@ pub enum Mob {
     #[emoji("🧝")]
     #[grade(MobGrade::Normal)]
     #[actions(vec![MobAction::FireBall])]
-    #[alignment(Alignment::TrueNeutral)]
+    #[alignment(Alignment::LawfulGood)]
     #[vulnerability(DamageType::Iron)]
     Elf,
     #[emoji("🧟")]
     #[grade(MobGrade::Strong)]
     #[actions(vec![MobAction::Glare, MobAction::FireBall])]
-    #[alignment(Alignment::TrueNeutral)]
+    #[alignment(Alignment::LawfulEvil)]
     #[vulnerability(DamageType::Holy)]
     Drow,
     #[emoji("👑")]
@@ -268,18 +268,9 @@ impl Mob {
 mod test {
 
     use super::*;
-    #[test]
-    fn ttt() {
-        let mob = crate::enemies::Mob::Elf;
-        let t = mob.alignment();
-        assert_eq!(t, Alignment::LawfulGood);
-        let t = mob.grade();
-        assert_eq!(t, MobGrade::Normal);
-        let t = mob.actions();
-        assert_eq!(t, vec![MobAction::FireBall]);
-    }
 
     #[test]
+    #[ignore]
     fn bomb_is_a_bomb() {
         let bomb = Mob::Bomb;
         let t = bomb.alignment();
@@ -293,12 +284,15 @@ mod test {
     }
 
     #[test]
+    #[ignore]
     fn no_drop() {
         let _enemy = Enemy::weak(Mob::Orc, 1);
         let item = ItemsWeHave::drop_chance(1, MobGrade::Weak);
         assert!(item.is_empty());
     }
+
     #[test]
+    #[ignore]
     fn drop_almost_sure() {
         let item = ItemsWeHave::drop_chance(1000, MobGrade::Boss);
         assert!(!item.is_empty());

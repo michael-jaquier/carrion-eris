@@ -1,5 +1,4 @@
 use crate::classes::Classes;
-use crate::database::surreal::consumer::SurrealConsumer;
 
 use crate::enemies::Mob;
 
@@ -252,7 +251,8 @@ pub async fn sell(
         let slot = EquipmentSlot::try_from(slot);
         match slot {
             Ok(slot) => {
-                let current_items = SurrealConsumer::get_items(user_id).await?;
+                let current_items = GAME.read().await.get_items(user_id);
+
                 ctx.send(|b| {
                     b.content(format!("Selling all items of type: {}", slot))
                         .ephemeral(true)
@@ -283,7 +283,8 @@ pub async fn sell(
     } else {
         ctx.send(|b| b.content("Selling all items").ephemeral(true))
             .await?;
-        let current_items = SurrealConsumer::get_items(user_id).await?;
+
+        let current_items = GAME.read().await.get_items(user_id);
         BUFFER
             .write()
             .await
@@ -305,7 +306,7 @@ pub async fn items(
     if let Some(slot) = slot {
         let slot = EquipmentSlot::try_from(slot);
         return match slot {
-            Ok(slot) => match SurrealConsumer::get_items(user_id).await? {
+            Ok(slot) => match GAME.read().await.get_items(user_id) {
                 None => {
                     ctx.send(|b| b.content("No items found").ephemeral(true))
                         .await?;
@@ -334,7 +335,7 @@ pub async fn items(
             }
         };
     }
-    match SurrealConsumer::get_items(user_id).await? {
+    match GAME.read().await.get_items(user_id) {
         Some(items) => {
             ctx.send(|b| b.content(format!("{}", items)).ephemeral(true))
                 .await?;

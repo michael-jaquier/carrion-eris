@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let intents =
             serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;
         let mut client = serenity::Client::builder(&token, intents)
-            .event_handler(Handler {})
+            .event_handler(Handler::default())
             .await
             .expect("Error creating client");
 

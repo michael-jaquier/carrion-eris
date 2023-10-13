@@ -285,16 +285,16 @@ mod test {
 
     #[test]
     #[ignore]
-    fn bomb_is_a_bomb() {
-        fn no_drop() {
-            let _enemy = Enemy::weak(Mob::Orc, 1);
-            let item = ItemsWeHave::drop_chance(1, MobGrade::Weak);
-            assert!(item.is_empty());
-        }
-        #[test]
-        fn drop_almost_sure() {
-            let item = ItemsWeHave::drop_chance(1000, MobGrade::Boss);
-            assert!(!item.is_empty());
-        }
+    fn no_drop() {
+        let _enemy = Enemy::weak(Mob::Orc, 1);
+        let item = ItemsWeHave::drop_chance(1, MobGrade::Weak);
+        assert!(item.is_empty());
+    }
+
+    #[test]
+    #[ignore]
+    fn drop_almost_sure() {
+        let item = ItemsWeHave::drop_chance(1000, MobGrade::Boss);
+        assert!(!item.is_empty());
     }
 }

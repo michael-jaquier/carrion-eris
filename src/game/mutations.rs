@@ -1,9 +1,9 @@
+use crate::character::Character;
 use crate::constructed::ItemsWeHave;
-use crate::enemies::Mob;
-use crate::items::{EquipmentSlot, Items};
-use crate::player::Character;
-use crate::skills::Skill;
-use crate::traits::CharacterTraits;
+use crate::enemy::Mob;
+use crate::item::{EquipmentSlot, Items};
+use crate::r#trait::CharacterTraits;
+use crate::skill::Skill;
 use crate::BattleInfo;
 
 impl Mutations {

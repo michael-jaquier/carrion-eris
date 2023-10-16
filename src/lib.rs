@@ -1,20 +1,19 @@
 pub mod battle;
-pub mod classes;
-pub mod commands;
+pub mod class;
+pub mod command;
 #[rustfmt::skip]
 pub mod constructed;
 pub mod database;
-pub mod dice;
-pub mod enemies;
+
+pub mod character;
+pub mod damage;
+pub mod enemy;
 mod game;
 pub mod game_loop;
-pub mod item_templates;
-pub mod items;
-pub mod mutators;
-pub mod player;
-pub mod skills;
-pub mod traits;
-pub mod units;
+pub mod item;
+pub mod skill;
+pub mod r#trait;
+pub mod unit;
 
 // Custom user data passed to all command functions
 #[derive(Debug)]
@@ -25,14 +24,15 @@ type Context<'a> = poise::Context<'a, State, Error>;
 
 use serde::{Deserialize, Serialize};
 use std::f64::consts::E;
+use tracing::{instrument, Level};
 
 use surrealdb::sql::Thing;
 use thiserror::Error;
 
-use skills::Skill;
+use skill::Skill;
 
-use crate::enemies::{Enemy, Mob};
-use crate::player::Character;
+use crate::character::Character;
+use crate::enemy::{Enemy, Mob};
 
 use std::fmt::{Display, Formatter};
 
@@ -77,9 +77,9 @@ pub struct BattleInfo {
     pub leveled_up: bool,
     pub monster_hp: i32,
     pub traits_available: u32,
-    pub next_level: u32,
-    pub experience_gained: u32,
-    pub skill_experience_gained: u32,
+    pub next_level: u64,
+    pub experience_gained: u64,
+    pub skill_experience_gained: u64,
     pub gold_gained: u64,
     pub item_gained: Vec<ItemsWeHave>,
     pub number_of_player_attacks: i32,
@@ -227,11 +227,11 @@ impl Display for BattleInfo {
 }
 
 trait AttributeScaling {
-    fn scaling(&self) -> Option<crate::units::Attribute>;
+    fn scaling(&self) -> Option<String>;
 }
 
 trait ElementalScaling {
-    fn scaling(&self) -> Option<crate::units::DamageType>;
+    fn scaling(&self) -> Option<damage::DamageType>;
 }
 
 pub fn log_power_scale(n: i32, power: Option<f64>) -> u32 {
@@ -263,15 +263,39 @@ pub fn exp_scaling(n: u32) -> u64 {
     let exp = ((ee.ln() + 1.0).ln()).min(1.0);
     ee.powf(E * exp) as u64
 }
+
+#[instrument(ret, level = Level::TRACE)]
+pub fn level_up_scaling(n: u32, power: Option<f64>) -> u64 {
+    let n = n as f64;
+    n.powf(power.unwrap_or(2.0)) as u64
+}
+#[instrument(ret, level = Level::TRACE)]
+pub fn dodge_scaling(n: i32) -> f64 {
+    let n = n + 1;
+    100.0 - (100.0 * E.powf(-(n as f64).ln() / 12.0))
+}
+
+#[instrument(ret, level = Level::TRACE)]
+pub fn armor_scaling(n: i32) -> f64 {
+    let n = n + 1;
+    100.0 - (100.0 * E.powf(-(n as f64).ln() / 9.0))
+}
+
+#[instrument(ret, level = Level::TRACE)]
+pub fn resistance_scaling(n: i32) -> f64 {
+    let n = n + 1;
+    100.0 - (100.0 * E.powf(-(n as f64).ln() / 9.0))
+}
+
 trait ValidEnum {
     fn valid() -> String;
 }
 
 trait EnemyEvents {
-    fn grade(&self) -> crate::enemies::MobGrade;
-    fn actions(&self) -> Vec<crate::skills::MobAction>;
+    fn grade(&self) -> crate::enemy::MobGrade;
+    fn actions(&self) -> Vec<crate::skill::MobAction>;
 
-    fn alignment(&self) -> crate::units::Alignment;
+    fn alignment(&self) -> crate::unit::Alignment;
 
-    fn vulnerability(&self) -> Option<crate::units::DamageType>;
+    fn vulnerability(&self) -> Option<damage::DamageType>;
 }

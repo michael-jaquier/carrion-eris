@@ -1,0 +1,21 @@
+name: Helm of the Dwarf Betrayer
+description: ""
+slot: Helmet
+armor: 100
+evasion: 100
+resistance:
+  Physical: 10
+  Elemental: 10
+damage: 
+  Iron: 140
+  Dark: 90
+attribute_bonus:
+  strength: 10
+  dexterity: 0
+  constitution: 10
+  intelligence: 0
+  wisdom: 0
+  charisma: 0
+action: 0
+rarity: Legendary
+value: 290

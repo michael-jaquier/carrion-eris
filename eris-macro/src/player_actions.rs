@@ -26,10 +26,10 @@ pub fn eris_from_dmg(ast: &DeriveInput) -> TokenStream2 {
 
     let q = quote! {
         impl crate::AttributeScaling for #name {
-            fn scaling(&self) -> Option<crate::units::Attribute> {
+            fn scaling(&self) -> Option<String> {
                use #name::*;
                 match self {
-                    #(#hit_enum => Some(#qq.into()),)*
+                    #(#hit_enum => Some(#qq.to_string()),)*
                     _ => None,
                 }
 
@@ -60,7 +60,7 @@ pub fn eris_elemental_scaling(ast: &DeriveInput) -> TokenStream2 {
 
     let q = quote! {
         impl crate::ElementalScaling for #name {
-            fn scaling(&self) -> Option<crate::units::DamageType> {
+            fn scaling(&self) -> Option<crate::damage::DamageType> {
                use #name::*;
                 match self {
                     #(#hit_enum => Some(#qq.into()),)*

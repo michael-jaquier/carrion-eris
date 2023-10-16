@@ -1,10 +1,11 @@
+use crate::character::Character;
 use crate::database::surreal::{CHARACTER_TABLE, DB, ENEMY_TABLE, ITEM_TABLE, MOB_TABLE};
 use crate::database::Consumer;
-use crate::enemies::{Enemy, Mob};
-use crate::items::Items;
-use crate::player::{Character, SkillSet};
+use crate::enemy::{Enemy, Mob};
+use crate::item::Items;
 use crate::{CarrionResult, MobQueue};
 
+use crate::skill::SkillSet;
 use serenity::async_trait;
 use tracing::debug;
 

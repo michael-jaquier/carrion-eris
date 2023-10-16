@@ -1,12 +1,13 @@
 use crate::database::surreal::{CHARACTER_TABLE, DB, ITEM_TABLE, MOB_TABLE};
 use crate::database::Producer;
-use crate::enemies::Mob;
+use crate::enemy::Mob;
 
-use crate::player::{Character, SkillSet};
+use crate::character::Character;
 use crate::{CarrionResult, MobQueue, Record};
 
 use serenity::async_trait;
 
+use crate::skill::SkillSet;
 use tracing::{debug, info};
 
 pub struct SurrealProducer {}
@@ -72,7 +73,7 @@ impl Producer for SurrealProducer {
 
     async fn store_user_items(
         &self,
-        content: crate::items::Items,
+        content: crate::item::Items,
         user_id: u64,
     ) -> CarrionResult<()> {
         debug!("Storing Items: {:?}", content);
@@ -87,7 +88,7 @@ impl Producer for SurrealProducer {
     }
 
     async fn create_user_items(&self, user_id: u64) -> CarrionResult<()> {
-        let items = crate::items::Items::default();
+        let items = crate::item::Items::default();
         let _: Option<Record> = DB.update((ITEM_TABLE, user_id)).content(items).await?;
         Ok(())
     }

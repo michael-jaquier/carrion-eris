@@ -1,0 +1,9 @@
+name: Legguards of Invincible Aegis
+description: The Legguards of Invincible Aegis are a legendary masterpiece forged in the heart of a celestial forge, said to be touched by the gods themselves. These legguards are adorned with intricate engravings of divine beings, and they grant the wearer an unmatched level of protection. The magical armor woven into them forms an impenetrable shield against all but the most devastating blows.
+slot: Legs
+armor: 100
+resistance:
+  Prismatic: 50
+action: 0
+rarity: Legendary
+value: 500

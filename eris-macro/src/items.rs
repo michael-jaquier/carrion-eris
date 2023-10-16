@@ -86,7 +86,7 @@ pub fn eris_consturcted_template(ast: &DeriveInput) -> TokenStream2 {
                 selected_enum
             }
 
-            fn _prob_slot(slot: crate::items::EquipmentSlot) -> Option<#name> {
+            fn _prob_slot(slot: crate::item::EquipmentSlot) -> Option<#name> {
 
                 use rand::Rng;
                 let filtered_enum: Vec<_> = vec![#(#probability),*].into_iter().filter(|(item, _)| item.generate().slot == slot).collect();
@@ -116,7 +116,7 @@ pub fn eris_consturcted_template(ast: &DeriveInput) -> TokenStream2 {
                 item.expect("Unable to generate an item").generate()
             }
 
-            pub fn generate_slot(slot: crate::items::EquipmentSlot) -> IndividualItem {
+            pub fn generate_slot(slot: crate::item::EquipmentSlot) -> IndividualItem {
                 let item = #name::_prob_slot(slot);
                 item.expect("Unable to generate an item for slot").generate()
             }
@@ -125,7 +125,7 @@ pub fn eris_consturcted_template(ast: &DeriveInput) -> TokenStream2 {
                 #name::_prob()
             }
 
-            pub fn generate_random_item_slot(slot: crate::items::EquipmentSlot) -> #name {
+            pub fn generate_random_item_slot(slot: crate::item::EquipmentSlot) -> #name {
                  let item = #name::_prob_slot(slot);
                 item.expect("Unable to generate an item for slot")
             }
@@ -194,7 +194,7 @@ pub fn eris_item_template(ast: &DeriveInput) -> TokenStream2 {
                 selected_enum
             }
 
-            fn _prob_slot(slot: crate::items::EquipmentSlot) -> Option<#name> {
+            fn _prob_slot(slot: crate::item::EquipmentSlot) -> Option<#name> {
 
                 use rand::Rng;
                 let filtered_enum: Vec<_> = vec![#(#probability),*].into_iter().filter(|(item, _)| item.generate().slot() == slot).collect();
@@ -224,7 +224,7 @@ pub fn eris_item_template(ast: &DeriveInput) -> TokenStream2 {
                 item.expect("Unable to generate an item").generate()
             }
 
-            pub fn generate_slot(slot: crate::items::EquipmentSlot) -> Box<dyn ItemProperties> {
+            pub fn generate_slot(slot: crate::item::EquipmentSlot) -> Box<dyn ItemProperties> {
                 let item = #name::_prob_slot(slot);
                 item.expect("Unable to generate an item for slot").generate()
             }

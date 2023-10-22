@@ -1,7 +1,7 @@
 use std::env;
 
 use carrion_eris::database::surreal::SurrealDB;
-use carrion_eris::{commands, State};
+use carrion_eris::{command, State};
 
 use poise::serenity_prelude as serenity;
 
@@ -47,16 +47,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let options = poise::FrameworkOptions {
         commands: vec![
-            commands::help(),
-            commands::create(),
-            commands::character_trait(),
-            commands::delete(),
-            commands::me(),
-            commands::skill(),
-            commands::battle(),
-            commands::items(),
-            commands::sell(),
-            commands::equip(),
+            command::help(),
+            command::create(),
+            command::character_trait(),
+            command::delete(),
+            command::me(),
+            command::skill(),
+            command::battle(),
+            command::items(),
+            command::sell(),
+            command::equip(),
         ],
         prefix_options: poise::PrefixFrameworkOptions {
             prefix: Some("~".into()),

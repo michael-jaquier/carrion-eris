@@ -1,13 +1,14 @@
+use crate::character::Character;
 use crate::constructed::ItemsWeHave;
 use crate::database::{Consumer, Database, Producer};
-use crate::enemies::{Enemy, Mob};
+use crate::enemy::{Enemy, Mob};
 use crate::game::mutations::Mutations;
 use crate::game_loop::BUFFER;
-use crate::items::Items;
-use crate::player::{Character, SkillSet};
+use crate::item::Items;
+use crate::skill::SkillSet;
 use rand::random;
 use std::collections::HashSet;
-use tracing::{info, warn};
+use tracing::{trace, warn};
 
 pub struct CharacterData {
     pub character: Character,
@@ -36,9 +37,9 @@ impl CharacterData {
             .await
             .expect("Unable to get active enemy from DB");
 
-        info!("Active Enemy: {:?}", active_enemy);
-        info!("Enemies: {:?}", enemies);
-        info!("Items: {:?}", items);
+        trace!("Active Enemy: {:?}", active_enemy);
+        trace!("Enemies: {:?}", enemies);
+        trace!("Items: {:?}", items);
         CharacterData {
             character: character.clone(),
             enemies,
@@ -99,7 +100,8 @@ impl CharacterData {
                 if self.character.available_traits == 0 {
                     return;
                 }
-                self.character.traits.insert(trait_);
+                self.character.insert_trait(trait_);
+
                 self.character.available_traits -= 1;
             }
 
@@ -174,8 +176,7 @@ impl CharacterData {
             }
 
             Mutations::UpdateSkills(_user_id, battle_info) => {
-                self.character.current_skill.experience +=
-                    battle_info.skill_experience_gained as u64;
+                self.character.current_skill.experience += battle_info.skill_experience_gained;
                 self.character.current_skill.try_level_up();
             }
 

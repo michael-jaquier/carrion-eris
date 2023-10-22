@@ -1,0 +1,20 @@
+name: Wand of Abyssal Desolation
+description: The Wand of Abyssal Desolation is a sinister artifact, brimming with the malevolent forces of darkness and despair. It is a conduit to the very heart of existential dread. The wand's ebony wood is adorned with ominous runes that pulse with an eerie, purplish glow when it's in use.
+slot: Weapon
+armor: null
+resistance: null
+damage:
+  Despair: 30
+  Existential: 30
+  Hope: 80
+  Holy: 50
+attribute_bonus:
+  strength: 0
+  dexterity: 0
+  constitution: 0
+  intelligence: 10
+  wisdom: 0
+  charisma: 5
+action: 0
+rarity: Legendary
+value: 260

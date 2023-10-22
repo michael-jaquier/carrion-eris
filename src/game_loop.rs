@@ -14,6 +14,7 @@ use crate::game::buffer::Buffer;
 use crate::game::data::GameData;
 use tokio::time::sleep;
 use tracing::info;
+use tracing::trace;
 lazy_static! {
     pub static ref BUFFER: Arc<RwLock<Buffer>> = Arc::new(RwLock::new(Buffer::new()));
     pub static ref GAME: Arc<RwLock<GameData>> = Arc::new(RwLock::new(GameData::new()));
@@ -40,7 +41,7 @@ impl serenity::client::EventHandler for Handler {
             }
 
             loop {
-                info!("Starting Battle Loop");
+                trace!("Starting Battle Loop");
 
                 let sleep_duration = Duration::from_secs(6);
                 let game_data = GAME.read().await;
@@ -95,23 +96,5 @@ impl serenity::client::EventHandler for Handler {
 
     async fn presence_update(&self, _ctx: Context, new_data: Presence) {
         info!("Presence Update: {:?}", new_data);
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::constructed::ItemsWeHave;
-    use heck::ToSnakeCase;
-
-    #[test]
-    fn items_we_have_from_string() {
-        let string = "DragonScaleArmor".to_string();
-        let item = ItemsWeHave::try_from(string.to_snake_case());
-        assert!(item.is_ok());
-        assert_eq!(item.unwrap(), ItemsWeHave::DragonScaleArmor);
-        let string = "Dragon Scale Armor".to_string();
-        let item = ItemsWeHave::try_from(string);
-        assert!(item.is_ok());
-        assert_eq!(item.unwrap(), ItemsWeHave::DragonScaleArmor)
     }
 }

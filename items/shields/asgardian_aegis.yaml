@@ -1,0 +1,12 @@
+name: Asgardian Aegis
+description: The Asgardian Aegis is a legendary shield that echoes with the power of the gods themselves. Forged in the divine fires of Asgard and imbued with the blessings of the divine pantheon, this shield is the stuff of myth and legend. Its surface is adorned with celestial runes that shimmer with a radiant aura, offering unparalleled protection to its wielder.
+slot: Shield
+armor: 3000
+resistance:
+  Physical: 50
+  Prismatic: 50
+  NonElemental: 50
+damage: null
+action: 0
+rarity: Artifact
+value: 500

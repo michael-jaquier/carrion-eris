@@ -1,0 +1,15 @@
+name: Amulet of Arcane Ascendance
+description: The Amulet of Arcane Ascendance is a relic of unparalleled mystic potency, a treasure coveted by scholars and sorcerers alike. Its centerpiece is a luminous sapphire, deep blue like the heart of a crystal-clear ocean, nestled within an ornate silver setting. The sapphire's facets shimmer with an ethereal radiance, revealing an otherworldly cosmos swirling within.
+slot: Amulet
+damage:
+  Arcane: 150
+  Fire: 90
+  Water: 70
+  Air: 70
+  Earth: 70
+  Healing: 300
+resistance:
+  Prismatic: 10
+action: 0
+rarity: Artifact
+value: 500

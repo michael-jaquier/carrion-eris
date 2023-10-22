@@ -22,8 +22,7 @@ pub fn eris_mob(ast: &DeriveInput) -> TokenStream2 {
         for attr in variant.attrs.iter() {
             if attr.path().is_ident("grade") {
                 let grade: Expr = attr.parse_args().unwrap();
-                choices
-                    .push(quote! { choices.extend(vec![#name::#variant_name; #grade as usize]); });
+                choices.push(quote! { choices.extend(vec![(#name::#variant_name, #grade)]); });
                 grade_sets.push(quote! { #name::#variant_name => #grade });
             }
             if attr.path().is_ident("alignment") {
@@ -43,30 +42,33 @@ pub fn eris_mob(ast: &DeriveInput) -> TokenStream2 {
 
     let q = quote! {
         impl rand::prelude::Distribution<Mob> for rand::distributions::Standard {
-            fn sample<R: rand::Rng + ?core::marker::Sized>(&self, rng: &mut R) -> crate::enemies::Mob {
+            fn sample<R: rand::Rng + ?core::marker::Sized>(&self, rng: &mut R) -> crate::enemy::Mob {
                 #(#choices)*
-                let index = rng.gen_range(0..choices.len());
-                choices[index]
-            }
+                let maximum_weight = choices.iter().map(|&(_, grade)| grade as u32).max().unwrap();
+                let weights: Vec<u32> = choices.iter().map(|&(mob, variant)| maximum_weight / variant as u32).collect();
+                let dist = rand::distributions::WeightedIndex::new(&weights).unwrap();
+                let chosen_index = dist.sample(&mut rand::thread_rng());
+                choices[chosen_index].0
         }
+    }
         use crate::EnemyEvents;
         impl crate::EnemyEvents for #name {
-            fn grade(&self) -> crate::enemies::MobGrade {
+            fn grade(&self) -> crate::enemy::MobGrade {
                 match self {
                     #(#grade_sets,)*
                 }
             }
-            fn actions(&self) -> Vec<crate::enemies::MobAction> {
+            fn actions(&self) -> Vec<crate::enemy::MobAction> {
                 match self {
                     #(#actions_sets,)*
                 }
             }
-            fn alignment(&self) -> crate::units::Alignment {
+            fn alignment(&self) -> crate::unit::Alignment {
                 match self {
                     #(#alignment_sets,)*
                 }
             }
-            fn vulnerability(&self) -> Option<crate::units::DamageType> {
+            fn vulnerability(&self) -> Option<crate::damage::DamageType> {
                 match self {
                     #(#vulnerability_sets,)*
                     _ => None

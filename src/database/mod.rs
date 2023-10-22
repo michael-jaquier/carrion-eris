@@ -2,10 +2,10 @@ pub mod surreal;
 
 use serenity::async_trait;
 
-use crate::enemies::{Enemy, Mob};
-use crate::items::Items;
-use crate::player::Character;
-use crate::player::SkillSet;
+use crate::character::Character;
+use crate::enemy::{Enemy, Mob};
+use crate::item::Items;
+use crate::skill::SkillSet;
 use crate::CarrionResult;
 
 #[async_trait]

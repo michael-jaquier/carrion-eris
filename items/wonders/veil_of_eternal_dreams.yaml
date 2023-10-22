@@ -1,0 +1,19 @@
+name: Veil of Eternal Dreams
+description: The Veil of Eternal Dreams is an enigmatic relic, unlike any other wondrous item known to mortals. Crafted by ancient dreamweavers, this ethereal veil transcends the boundaries of reality, allowing its wearer to traverse the realms of dreams and reality.
+slot: WondrousItem
+armor: 30
+evasion: 80
+resistance:
+  Prismatic: 50
+damage:
+  Prismatic: 30
+attribute_bonus:
+  strength: 0
+  dexterity: 0
+  constitution: 0
+  intelligence: 10
+  wisdom: 10
+  charisma: 10
+action: 1
+rarity: Unique
+value: 1

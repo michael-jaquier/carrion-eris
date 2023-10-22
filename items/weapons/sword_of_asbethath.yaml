@@ -1,0 +1,18 @@
+name: Sword of Asbethath the Betrayer
+description: ''
+slot: Weapon
+armor: null
+damage:
+  Existential: 190
+  Despair: 190
+  Holy: 190
+attribute_bonus:
+  strength: 10
+  dexterity: 0
+  constitution: 0
+  intelligence: 0
+  wisdom: 0
+  charisma: 100
+action: 0
+rarity: Artifact
+

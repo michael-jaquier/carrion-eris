@@ -1,16 +1,16 @@
 use crate::battle::BattleResult;
 use crate::database::{Consumer, Database};
-use crate::{database::Producer, items::Items};
+use crate::{database::Producer, item::Items};
 
-use crate::enemies::Mob;
+use crate::character::Character;
+use crate::enemy::Mob;
 use crate::game::character_data::CharacterData;
 use crate::game::mutations::Mutations;
 use crate::game_loop::BUFFER;
-use crate::player::Character;
 use crate::BattleInfo;
 use rand::random;
 use std::collections::HashMap;
-use tracing::{info, warn};
+use tracing::{info, trace, warn};
 
 pub struct GameData {
     pub characters: HashMap<u64, CharacterData>,
@@ -167,7 +167,7 @@ impl GameData {
                         .map_err(|e| {
                             warn!("Failed to store enemies: {:?}", e);
                         });
-                    info!("Stored enemies in {:?}", now.elapsed());
+                    trace!("Stored enemies in {:?}", now.elapsed());
                 }
 
                 Mutations::SynchronizeItems(user_id) => {
@@ -184,7 +184,7 @@ impl GameData {
                         .map_err(|e| {
                             warn!("Failed to store items: {:?}", e);
                         });
-                    info!("Stored items in {:?}", now.elapsed());
+                    trace!("Stored items in {:?}", now.elapsed());
                 }
 
                 _ => {}
@@ -218,7 +218,7 @@ impl GameData {
                 .map_err(|e| {
                     warn!("Failed to update character: {:?}", e);
                 });
-            info!("Stored character in {:?}", now.elapsed());
+            trace!("Stored character in {:?}", now.elapsed());
         }
     }
 }

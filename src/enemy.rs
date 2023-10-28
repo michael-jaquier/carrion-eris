@@ -2,11 +2,11 @@ use std::f64::consts::E;
 
 use crate::character::Character;
 use crate::damage::{Damage, DamageType};
+use crate::item::IndividualItem;
 use crate::skill::MobAction;
 use crate::unit::Attributes;
 use eris_macro::{ErisDisplayEmoji, ErisMob, ErisValidEnum};
 
-use crate::constructed::ItemsWeHave;
 use crate::{level_up_scaling, sub_linear_scaling};
 use rand::prelude::SliceRandom;
 use rand::{thread_rng, Rng};
@@ -30,7 +30,7 @@ pub struct Enemy {
     pub(crate) resistance: i32,
     pub(crate) gold: u64,
     pub(crate) attributes: Attributes,
-    pub(crate) items: Vec<ItemsWeHave>,
+    pub(crate) items: Vec<IndividualItem>,
     pub(crate) state: EnemyState,
     actions: Vec<MobAction>,
 }
@@ -46,74 +46,6 @@ impl Enemy {
         let level = level as f64;
         let exp = E.powf(level.ln());
         ((level * constitution + exp) * E.powf(constitution.ln())) as u32 + level as u32 * 110
-    }
-
-    pub fn weak(mob: Mob, level: u32) -> Enemy {
-        let attributes: Attributes = (&mob).into();
-        Enemy {
-            kind: mob,
-            level,
-            experience: Enemy::linear_scaling(level),
-            health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: 10,
-            resistance: 10,
-            gold: sub_linear_scaling(level) as u64,
-            attributes,
-            items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
-            state: EnemyState::Alive,
-            actions: mob.actions(),
-        }
-    }
-
-    pub fn normal(mob: Mob, level: u32) -> Enemy {
-        let attributes: Attributes = (&mob).into();
-        Enemy {
-            kind: mob,
-            level,
-            experience: Enemy::linear_scaling(level * 2),
-            health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: 25,
-            resistance: 25,
-            gold: sub_linear_scaling(level * 2) as u64,
-            attributes,
-            items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
-            state: EnemyState::Alive,
-            actions: mob.actions(),
-        }
-    }
-
-    pub fn strong(mob: Mob, level: u32) -> Enemy {
-        let attributes: Attributes = (&mob).into();
-        Enemy {
-            kind: mob,
-            level,
-            experience: Enemy::linear_scaling(level * 5),
-            health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: 30,
-            resistance: 30,
-            gold: sub_linear_scaling(level * 5) as u64,
-            attributes: (&mob).into(),
-            items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
-            state: EnemyState::Alive,
-            actions: mob.actions(),
-        }
-    }
-
-    pub fn boss(mob: Mob, level: u32) -> Enemy {
-        let attributes = <&Mob as Into<Attributes>>::into(&mob).clone();
-        Enemy {
-            kind: mob,
-            level,
-            experience: Enemy::linear_scaling(level * 10),
-            health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: 100,
-            resistance: 100,
-            gold: sub_linear_scaling(level * 100) as u64,
-            attributes,
-            items: ItemsWeHave::drop_chance(level as u64, mob.grade()),
-            state: EnemyState::Alive,
-            actions: mob.actions(),
-        }
     }
 
     pub fn alive(&self) -> bool {
@@ -140,7 +72,7 @@ impl Enemy {
     }
 
     pub fn cost(&self) -> u64 {
-        self.gold * 10 * self.kind.grade() as u64 * self.level as u64
+        self.gold * 3
     }
 }
 
@@ -167,17 +99,30 @@ pub enum MobGrade {
     Weak = 1,
     Normal = 5,
     Strong = 10,
-    Boss = 50,
+    Champion = 25,
+    Elite = 35,
+    Legendary = 50,
+    Boss = 100,
 }
 
 impl MobGrade {
     pub fn to_enemy(&self, mob: Mob, level: u32) -> Enemy {
-        match self {
-            MobGrade::Weak => Enemy::weak(mob, level),
-            MobGrade::Normal => Enemy::normal(mob, level),
-            MobGrade::Strong => Enemy::strong(mob, level),
-            MobGrade::Boss => Enemy::boss(mob, level),
-        }
+        let attributes: Attributes = (&mob).into();
+        let mut enemy = Enemy {
+            kind: mob,
+            level,
+            experience: Enemy::linear_scaling(level * mob.grade() as u32),
+            health: Enemy::hp_gain(&attributes, level) as i32,
+            defense: mob.grade() as i32,
+            resistance: mob.grade() as i32,
+            gold: sub_linear_scaling(level * mob.grade() as u32) as u64,
+            items: vec![],
+            state: EnemyState::Alive,
+            actions: mob.actions(),
+            attributes,
+        };
+        enemy.items = (&enemy).into();
+        enemy
     }
 }
 
@@ -214,7 +159,7 @@ pub enum Mob {
     #[vulnerability(DamageType::Holy)]
     Drow,
     #[emoji("👑")]
-    #[grade(MobGrade::Boss)]
+    #[grade(MobGrade::Strong)]
     #[actions(vec![MobAction::Crush, MobAction::SlimeAbsorb])]
     #[alignment(Alignment::TrueNeutral)]
     #[vulnerability(DamageType::Despair)]
@@ -232,13 +177,13 @@ pub enum Mob {
     #[vulnerability(DamageType::Existential)]
     NeuronThief,
     #[emoji("💣")]
-    #[grade(MobGrade::Boss)]
+    #[grade(MobGrade::Strong)]
     #[actions(vec![MobAction::Explode])]
     #[alignment(Alignment::ChaoticEvil)]
     #[vulnerability(DamageType::Holy)]
     Bomb,
     #[emoji("💀")]
-    #[grade(MobGrade::Boss)]
+    #[grade(MobGrade::Strong)]
     #[actions(vec![MobAction::NecroticBlast, MobAction::SummonUndead])]
     #[alignment(Alignment::LawfulEvil)]
     #[vulnerability(DamageType::Holy)]
@@ -249,6 +194,30 @@ pub enum Mob {
     #[alignment(Alignment::ChaoticEvil)]
     #[vulnerability(DamageType::Fire)]
     Troll,
+    #[emoji("🏆")]
+    #[grade(MobGrade::Champion)]
+    #[actions(vec![MobAction::Crush])]
+    #[alignment(Alignment::LawfulNeutral)]
+    #[vulnerability(DamageType::Arcane)]
+    Gladiator,
+    #[emoji("🐘")]
+    #[grade(MobGrade::Elite)]
+    #[actions(vec![MobAction::ShadowNova, MobAction::SolarFlare])]
+    #[alignment(Alignment::ChaoticNeutral)]
+    #[vulnerability(DamageType::Light)]
+    Behemoth,
+    #[emoji("🦖")]
+    #[grade(MobGrade::Elite)]
+    #[actions(vec![MobAction::BoneShatter, MobAction::FrostBreath])]
+    #[alignment(Alignment::ChaoticNeutral)]
+    #[vulnerability(DamageType::Air)]
+    Dreadmaw,
+    #[emoji("🐉")]
+    #[grade(MobGrade::Legendary)]
+    #[actions(vec![MobAction::DragonBreath, MobAction::TailSwipe, MobAction::FieryRoar])]
+    #[alignment(Alignment::ChaoticEvil)]
+    #[vulnerability(DamageType::Earth)]
+    Eldragor,
 }
 
 impl Mob {
@@ -277,20 +246,6 @@ mod test {
         assert_eq!(bomb_string, "💥 Explode 💥");
     }
 
-    #[test]
-    #[ignore]
-    fn no_drop() {
-        let _enemy = Enemy::weak(Mob::Orc, 1);
-        let item = ItemsWeHave::drop_chance(1, MobGrade::Weak);
-        assert!(item.is_empty());
-    }
-
-    #[test]
-    #[ignore]
-    fn drop_almost_sure() {
-        let item = ItemsWeHave::drop_chance(1000, MobGrade::Boss);
-        assert!(!item.is_empty());
-    }
     #[test]
     fn expected_mob_probability() {
         let mobs: Vec<Mob> = (0..10000).map(|_| rand::random()).collect();

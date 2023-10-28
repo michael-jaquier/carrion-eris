@@ -44,6 +44,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2c99f64d1e06488f620f932677e24bc6e2897582980441ae90a671415bd7ec2f"
 dependencies = [
  "cfg-if",
+ "getrandom",
  "once_cell",
  "version_check",
 ]
@@ -493,6 +494,7 @@ dependencies = [
  "once_cell",
  "poise",
  "rand 0.8.5",
+ "random_word",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -2031,6 +2033,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "paste"
+version = "1.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "de3145af08024dea9fa9914f381a17b8fc6034dfb00f3a84013f7ff43f29ed4c"
+
+[[package]]
 name = "path-clean"
 version = "1.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2394,6 +2402,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6f97cdb2a36ed4183de61b2f824cc45c9f1037f28afe0a322e9fff4c108b5aaa"
 dependencies = [
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "random_word"
+version = "0.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e83a2cf05929e255b936b543278a1a4c3eb6cce684239c9e2440f346036ad8b5"
+dependencies = [
+ "ahash 0.8.3",
+ "miniz_oxide",
+ "once_cell",
+ "paste",
+ "rand 0.8.5",
+ "unicase",
 ]
 
 [[package]]

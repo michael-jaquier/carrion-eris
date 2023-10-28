@@ -1,7 +1,7 @@
 use crate::character::Character;
-use crate::constructed::ItemsWeHave;
+
 use crate::enemy::Mob;
-use crate::item::{EquipmentSlot, Items};
+use crate::item::{EquipmentSlot, IndividualItem, Items};
 use crate::r#trait::CharacterTraits;
 use crate::skill::Skill;
 use crate::BattleInfo;
@@ -31,9 +31,9 @@ impl Mutations {
 #[derive(Debug, Clone)]
 pub enum Mutations {
     Skill(u64, Skill),
-    Equip(u64, ItemsWeHave),
+    Equip(u64, IndividualItem),
     Delete(u64),
-    Create(Character),
+    Create(Box<Character>),
     Trait(u64, CharacterTraits),
     AddEnemy(u64, Mob, u32),
     // user_id, optional slot to sell, and the items the user "knew" about before the sell

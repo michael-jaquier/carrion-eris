@@ -53,18 +53,22 @@ impl Default for Character {
 }
 
 impl Character {
-    pub(crate) fn insert_trait(&mut self, trait_: CharacterTraits) {
+    pub(crate) fn get_traits(&self) -> &HashSet<CharacterTraits> {
+        &self.traits
+    }
+
+    pub(crate) fn insert_trait(&mut self, trait_: CharacterTraits) -> bool {
         info!("Inserting trait: {:?}", trait_);
         trait_.attribute_mutator(&mut self.attributes);
         info!("Attributes after mutation {:?}", self.attributes);
-        self.traits.insert(trait_);
+        self.traits.insert(trait_)
     }
 
     pub fn mutations(&self) -> TraitMutations {
         CharacterTraits::apply_traits(&self.traits)
     }
     pub fn experience_to_next_level(&self) -> u64 {
-        level_up_scaling(self.level, Some(1.0 + (self.level as f64).ln()))
+        level_up_scaling(self.level, Some(1.0 + (self.level as f64).ln())) + self.level as u64 * 100
     }
 
     pub fn action_points(&self) -> i32 {
@@ -182,7 +186,7 @@ impl Character {
             battle_info.gold_gained += enemy.gold;
             battle_info.experience_gained = enemy.experience;
             battle_info.traits_available = self.available_traits;
-            info!(
+            trace!(
                 "Experience Gained {} Next Level {} Curent Experience {}",
                 battle_info.experience_gained,
                 self.experience_to_next_level(),

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use std::ops::{Add, AddAssign, Sub};
 
-#[derive(Clone, Serialize, Deserialize, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Serialize, Deserialize, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Attributes {
     pub(crate) strength: i32,
     pub(crate) dexterity: i32,
@@ -51,6 +51,53 @@ impl Attributes {
             "charisma" => self.charisma,
             _ => panic!("Invalid attribute"),
         }
+    }
+
+    pub(crate) fn sum(&self) -> i32 {
+        let mut sum = 0;
+        sum += self.strength;
+        sum += self.dexterity;
+        sum += self.constitution;
+        sum += self.intelligence;
+        sum += self.wisdom;
+        sum += self.charisma;
+        sum
+    }
+    pub(crate) fn max(&self) -> i32 {
+        let mut max = 0;
+        max = max.max(self.strength);
+        max = max.max(self.dexterity);
+        max = max.max(self.constitution);
+        max = max.max(self.intelligence);
+        max = max.max(self.wisdom);
+        max = max.max(self.charisma);
+        max
+    }
+
+    pub(crate) fn max_stat(&self) -> Option<String> {
+        if self.max() == 0 {
+            return None;
+        }
+        let mut max = None;
+        if self.strength == self.max() {
+            max = Some("strength".to_string());
+        }
+        if self.dexterity == self.max() {
+            max = Some("dexterity".to_string());
+        }
+        if self.constitution == self.max() {
+            max = Some("constitution".to_string());
+        }
+        if self.intelligence == self.max() {
+            max = Some("intelligence".to_string());
+        }
+        if self.wisdom == self.max() {
+            max = Some("wisdom".to_string());
+        }
+        if self.charisma == self.max() {
+            max = Some("charisma".to_string());
+        }
+        max
     }
 }
 

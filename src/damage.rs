@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
 use derive_builder::Builder;
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, AddAssign};
@@ -137,6 +139,17 @@ impl ResistCategories {
     }
 }
 
+impl Distribution<ResistCategories> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> ResistCategories {
+        match rng.gen_range(0..=40) {
+            0..=20 => ResistCategories::Elemental,
+            21..=25 => ResistCategories::Physical,
+            26..=39 => ResistCategories::NonElemental,
+            _ => ResistCategories::Prismatic,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash, EnumIter, Default)]
 pub enum DamageType {
     Fire,
@@ -214,7 +227,7 @@ impl From<&str> for DamageType {
             "prismatic" => DamageType::Prismatic,
             "healing" => DamageType::Healing,
             "universal" => DamageType::Universal,
-            _ => panic!("Invalid damage type"),
+            _ => panic!("Invalid Damage Type {s:?}"),
         }
     }
 }

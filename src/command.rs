@@ -122,7 +122,10 @@ pub async fn create(
                         .ephemeral(true)
                 })
                 .await?;
-                BUFFER.write().await.add(Mutations::Create(new_character));
+                BUFFER
+                    .write()
+                    .await
+                    .add(Mutations::Create(Box::new(new_character)));
             }
             Err(_) => {
                 let valid_classes = Classes::valid();
@@ -365,7 +368,10 @@ pub async fn equip(
         let item = ItemsWeHave::try_from(item);
         match item {
             Ok(item) => {
-                BUFFER.write().await.add(Mutations::Equip(user_id, item));
+                BUFFER
+                    .write()
+                    .await
+                    .add(Mutations::Equip(user_id, item.generate()));
                 BUFFER
                     .write()
                     .await

@@ -51,6 +51,7 @@ pub struct IndividualItem {
     pub(crate) attribute_bonus: Option<Attributes>,
     pub(crate) action: Option<u32>,
     pub(crate) rarity: String,
+    pub(crate) points: Option<u64>,
 }
 
 pub enum ResistCategories {
@@ -59,7 +60,7 @@ pub enum ResistCategories {
     NonElemental,
     Boss,
     Prismatic,
-    Universal
+    Universal,
 }
 
 pub fn parse_items() -> std::io::Result<String> {
@@ -151,6 +152,8 @@ fn struct_conversion(st: &IndividualItem) -> String {
     source_code.push_str(&format!("action: {},", action));
     source_code.push_str("\n\t\t\t");
     source_code.push_str(&format!("rarity: Rarity::{},", st.rarity));
+    source_code.push_str("\n\t\t\t");
+    source_code.push_str(&format!("points: {},", st.points.unwrap_or_default()));
     source_code.push_str("\n\t\t");
     source_code.push_str("}\n");
     source_code.push_str("\t}\n");

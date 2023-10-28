@@ -1,6 +1,7 @@
 pub mod battle;
 pub mod class;
 pub mod command;
+pub mod items;
 #[rustfmt::skip]
 pub mod constructed;
 pub mod database;
@@ -22,6 +23,7 @@ type CarrionResult<T> = Result<T, CarrionError>;
 type Error = Box<dyn std::error::Error + Send + Sync>;
 type Context<'a> = poise::Context<'a, State, Error>;
 
+use item::IndividualItem;
 use serde::{Deserialize, Serialize};
 use std::f64::consts::E;
 use tracing::{instrument, Level};
@@ -35,8 +37,6 @@ use crate::character::Character;
 use crate::enemy::{Enemy, Mob};
 
 use std::fmt::{Display, Formatter};
-
-use crate::constructed::ItemsWeHave;
 
 #[derive(Error, Debug)]
 pub enum CarrionError {
@@ -81,7 +81,7 @@ pub struct BattleInfo {
     pub experience_gained: u64,
     pub skill_experience_gained: u64,
     pub gold_gained: u64,
-    pub item_gained: Vec<ItemsWeHave>,
+    pub item_gained: Vec<IndividualItem>,
     pub number_of_player_attacks: i32,
     pub number_of_enemy_attacks: i32,
 }
@@ -216,9 +216,7 @@ impl Display for BattleInfo {
 
         if !self.item_gained.is_empty() {
             for item in &self.item_gained {
-                string.push_str(
-                    format!("\n\t🎁\t Item gained: {}\t🎁", &item.generate().name).as_str(),
-                );
+                string.push_str(format!("\n\t🎁\t Item gained: {}\t🎁", &item.name).as_str());
             }
         }
         string.push_str("\n🗡️\n");

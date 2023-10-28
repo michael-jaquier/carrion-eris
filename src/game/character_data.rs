@@ -1,14 +1,13 @@
 use crate::character::Character;
-use crate::constructed::ItemsWeHave;
 use crate::database::{Consumer, Database, Producer};
 use crate::enemy::{Enemy, Mob};
 use crate::game::mutations::Mutations;
 use crate::game_loop::BUFFER;
-use crate::item::Items;
+use crate::item::{IndividualItem, Items};
 use crate::skill::SkillSet;
 use rand::random;
 use std::collections::HashSet;
-use tracing::{trace, warn};
+use tracing::{info, trace, warn};
 
 pub struct CharacterData {
     pub character: Character,
@@ -100,15 +99,21 @@ impl CharacterData {
                 if self.character.available_traits == 0 {
                     return;
                 }
-                self.character.insert_trait(trait_);
+                info!("Inserting trait: {:?}", trait_);
+                let new_trait = self.character.insert_trait(trait_);
 
-                self.character.available_traits -= 1;
+                if new_trait {
+                    info!("Trait {} inserted", trait_);
+                    self.character.available_traits -= 1;
+                }
+                info!("Available traits: {}", self.character.available_traits);
+                info!("Traits: {:?}", self.character.get_traits());
             }
 
             Mutations::AddEnemy(user_id, mob, count) => {
                 for _ in 0..count {
                     let cost = mob.generate(&self.character).cost();
-                    self.items.gold -= cost;
+                    self.items.gold = self.items.gold.saturating_sub(cost);
                     if self.items.gold < cost {
                         self.items.gold += cost;
                         break;
@@ -131,9 +136,9 @@ impl CharacterData {
             }
 
             Mutations::NewItems(user_id, items) => {
-                let unset_items: HashSet<ItemsWeHave> = items
+                let unset_items: HashSet<IndividualItem> = items
                     .iter()
-                    .filter_map(|item| self.character.equipment.auto_equip(*item))
+                    .filter_map(|item| self.character.equipment.auto_equip(item.clone()))
                     .collect();
 
                 self.items += Items::new(unset_items, items.gold);

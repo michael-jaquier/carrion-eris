@@ -2,10 +2,17 @@
 # Skills
 
 * Support skills
+* Ascended secret skills
+
+# Player
+
+* Player class promotions
+* Player multi-classing
 
 # Code
 
 * Add a multiplier based on "game speed" used for drop.exp.gold.etc
+* Create a pure file-based DB to lower compile times
 
 # Traits
 
@@ -21,8 +28,8 @@
 
 * Maybe a shop where you can gamble for items using gold
 * Trading items between players
-* Procedural / Random items with higher drop rate ( Rare or less )
-* Move all Legenddary + Items to a special dungeon bosses
+* Move all Legendary + Items to a special dungeon bosses
+* Command to dispaly stats of an item
 
 # Mobs
 

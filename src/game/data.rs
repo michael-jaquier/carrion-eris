@@ -144,7 +144,7 @@ impl GameData {
                     self.characters.insert(character.user_id, character_data);
                     let _ = self
                         .producer
-                        .create_character(character.clone())
+                        .create_character(*character.clone())
                         .await
                         .map_err(|e| {
                             warn!("Failed to store character: {:?}", e);

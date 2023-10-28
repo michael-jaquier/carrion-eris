@@ -141,6 +141,14 @@ pub enum Skill {
     #[element("physical")]
     #[emoji("⚔️")]
     BruteForce,
+    #[stat("strength")]
+    #[element("light")]
+    #[emoji("💥")]
+    BlindingFist,
+    #[element("arcane")]
+    #[stat("strength")]
+    #[emoji("✨")]
+    EtherealCrush,
 }
 
 impl Skill {
@@ -180,16 +188,22 @@ impl Skill {
                 damage.damage += 5;
             }
             Skill::Earthquake => {
-                damage.damage += 5;
+                damage.number_of_hits = thread_rng().gen_range(1..15);
+                damage.damage -= 15;
             }
             Skill::HolySmite => {
+                if thread_rng().gen_bool(0.01) {
+                    damage.multiplier = 10.0;
+                };
                 damage.damage += 5;
             }
             Skill::DivineBlessing => {
                 damage.damage += 5;
             }
             Skill::SuicidalPersuasion => {
-                damage.damage += 5;
+                if thread_rng().gen_bool(0.035) {
+                    damage.damage = 99999;
+                };
             }
             Skill::Seduction => {
                 damage.damage += 5;
@@ -222,7 +236,7 @@ impl Skill {
                 damage.damage += 5;
             }
             Skill::IronFusillade => {
-                damage.damage += 5;
+                damage.number_of_hits = thread_rng().gen_range(1..7);
             }
             Skill::PrismaticHowl => {
                 damage.damage += 5;
@@ -242,6 +256,13 @@ impl Skill {
                 damage.critical_multiplier += 2.0;
                 damage.number_of_hits = 3
             }
+            Skill::BlindingFist => {
+                damage.damage += 5;
+                damage.alignment = Some(crate::unit::Alignment::ChaoticEvil);
+            }
+            Skill::EtherealCrush => {
+                damage.damage += thread_rng().gen_range(0..100);
+            }
         }
     }
 
@@ -259,17 +280,16 @@ impl Skill {
         let elemental_bonus = self.elemental_scaling() * player.level as i32;
         base.damage +=
             (attribute_bonus + elemental_bonus).saturating_div(base.number_of_hits as i32);
+        base.damage = base.damage.max(1);
         base
     }
 
     fn attribute(&self, attributes: &Attributes) -> i32 {
-        let n = if let Some(attribute) = AttributeScaling::scaling(self) {
-            let attribute_value = attributes.get(&attribute);
-            log_power_scale(attribute_value, None)
+        if let Some(attribute) = AttributeScaling::scaling(self) {
+            attributes.get(&attribute)
         } else {
             0
-        };
-        n as i32
+        }
     }
 
     fn element(&self) -> Option<DamageType> {
@@ -320,62 +340,111 @@ pub enum MobAction {
     #[stat("strength")]
     #[emoji("🦷")]
     Bite,
+
     #[element("physical")]
     #[stat("strength")]
     #[emoji("👊")]
     Claw,
+
     #[element("physical")]
     #[stat("strength")]
     #[emoji("🔪")]
     Stab,
+
     #[element("fire")]
     #[stat("intelligence")]
     #[emoji("🔥")]
     FireBall,
+
     #[element("holy")]
     #[stat("wisdom")]
     #[emoji("🌟")]
     SlimeAbsorb,
+
     #[element("physical")]
     #[stat("constitution")]
     #[emoji("👊")]
     Crush,
+
     #[element("physical")]
     #[stat("dexterity")]
     #[emoji("🗡️")]
     Riposte,
+
     #[element("dark")]
     #[stat("charisma")]
     #[emoji("👁️")]
     Glare,
+
     #[element("existential")]
     #[stat("charisma")]
     #[emoji("🔊")]
     MindBreak,
+
     #[element("fire")]
     #[stat("intelligence")]
     #[emoji("📛")]
     Burn,
+
     #[element("boss")]
     #[stat("constitution")]
     #[emoji("💥")]
     Explode,
+
     #[element("dark")]
     #[stat("intelligence")]
     #[emoji("☠️")]
     NecroticBlast,
+
     #[element("existential")]
     #[stat("intelligence")]
     #[emoji("🧟")]
     SummonUndead,
+
     #[element("physical")]
     #[stat("strength")]
     #[emoji("💥")]
     Smash,
+
     #[element("healing")]
     #[stat("constitution")]
     #[emoji("🔄")]
     Regenerate,
+
+    #[element("fire")]
+    #[stat("intelligence")]
+    #[emoji("☀")]
+    SolarFlare,
+
+    #[element("dark")]
+    #[stat("intelligence")]
+    #[emoji("🌑")]
+    ShadowNova,
+
+    #[emoji("💥")]
+    #[element("physical")]
+    #[stat("strength")]
+    BoneShatter,
+
+    #[stat("wisdom")]
+    #[emoji("❄️")]
+    #[element("prismatic")]
+    FrostBreath,
+
+    #[element("fire")]
+    #[stat("intelligence")]
+    #[emoji("🔥")]
+    DragonBreath,
+
+    #[element("physical")]
+    #[stat("strength")]
+    #[emoji("🐲")]
+    TailSwipe,
+
+    #[element("despair")]
+    #[stat("charisma")]
+    #[emoji("🌋")]
+    FieryRoar,
 }
 
 impl MobAction {
@@ -424,26 +493,6 @@ impl MobAction {
             return thread_rng().gen_range(bottom..top);
         }
         thread_rng().gen_range(0..10)
-    }
-}
-
-#[cfg(test)]
-mod test {
-    use crate::character::Character;
-    use crate::class::Classes::Paladin;
-    use crate::enemy::Mob;
-    use crate::skill::SkillSet;
-    use rand::random;
-
-    #[test]
-    fn slash_damage_within_range() {
-        let me = Character::new("sdf".to_string(), 23, Paladin);
-        let skill = crate::skill::Skill::Slash;
-        let skill_set = SkillSet::new(skill);
-        let mob: Mob = random();
-        let enemy = mob.generate(&me);
-        let damage = skill_set.act(&me, &enemy);
-        assert!(damage.damage() < 150, "Damage was {:?}", damage);
     }
 }
 
@@ -528,5 +577,38 @@ impl SkillSet {
 
     pub fn action_experience_scaling(&self) -> i32 {
         (self.level * 10) as i32
+    }
+}
+#[cfg(test)]
+mod test {
+    use crate::character::Character;
+    use crate::class::Classes::Paladin;
+    use crate::enemy::Mob;
+    use crate::skill::SkillSet;
+    use crate::unit::Attributes;
+    use rand::random;
+
+    #[test]
+    fn slash_damage_within_range() {
+        let me = Character::new("sdf".to_string(), 23, Paladin);
+        let skill = crate::skill::Skill::Slash;
+        let skill_set = SkillSet::new(skill);
+        let mob: Mob = random();
+        let enemy = mob.generate(&me);
+        let damage = skill_set.act(&me, &enemy);
+        assert!(damage.damage() < 150, "Damage was {:?}", damage);
+    }
+
+    #[test]
+    fn attribute_scaling_power() {
+        let mut attributes = Attributes::zero();
+        attributes.strength = 10;
+        let skill = crate::skill::Skill::Slash;
+
+        assert!(
+            skill.attribute(&attributes) == 10,
+            "Attribute was {:?}",
+            skill.attribute(&attributes)
+        );
     }
 }

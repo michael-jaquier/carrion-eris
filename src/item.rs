@@ -1,6 +1,8 @@
 use crate::unit::Attributes;
 use crate::BattleInfo;
 use eris_macro::{ErisDisplayEmoji, ErisValidEnum};
+use rand::distributions::Standard;
+use rand::prelude::Distribution;
 use serde::{Deserialize, Serialize};
 use std::collections::hash_set::Iter;
 use std::collections::{HashMap, HashSet};
@@ -9,7 +11,6 @@ use std::fs;
 use std::hash::Hash;
 use std::ops::AddAssign;
 
-use crate::constructed::ItemsWeHave;
 use crate::damage::{DamageType, ResistCategories};
 
 #[derive(
@@ -37,7 +38,25 @@ pub enum EquipmentSlot {
     #[emoji("🎲")]
     WondrousItem,
 }
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, PartialOrd, Ord)]
+
+impl Distribution<EquipmentSlot> for Standard {
+    fn sample<R: rand::Rng + ?Sized>(&self, rng: &mut R) -> EquipmentSlot {
+        match rng.gen_range(0..1000) {
+            0..=100 => EquipmentSlot::Helmet,
+            101..=301 => EquipmentSlot::Armor,
+            302..=403 => EquipmentSlot::Legs,
+            404..=504 => EquipmentSlot::Feet,
+            505..=605 => EquipmentSlot::Hands,
+            606..=706 => EquipmentSlot::Weapon,
+            707..=807 => EquipmentSlot::Shield,
+            808..=938 => EquipmentSlot::Ring,
+            939..=980 => EquipmentSlot::Amulet,
+            _ => EquipmentSlot::WondrousItem,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash, PartialOrd, Ord, Copy)]
 pub enum Rarity {
     Common = 150,
     Uncommon = 100,
@@ -69,7 +88,7 @@ impl From<String> for Rarity {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Default)]
 pub struct Items {
-    items: HashSet<ItemsWeHave>,
+    items: HashSet<IndividualItem>,
     pub(crate) gold: u64,
 }
 
@@ -78,9 +97,9 @@ impl From<&BattleInfo> for Items {
         let mut gold = battle_info.gold_gained;
         let mut items = HashSet::new();
         for item in battle_info.item_gained.clone() {
-            match items.insert(item) {
+            match items.insert(item.clone()) {
                 true => {
-                    gold += item.generate().rarity as u64;
+                    gold += item.rarity as u64;
                 }
                 false => {}
             }
@@ -93,9 +112,9 @@ impl AddAssign for Items {
     fn add_assign(&mut self, rhs: Self) {
         self.gold += rhs.gold;
         for item in rhs.items {
-            match self.items.insert(item) {
+            match self.items.insert(item.clone()) {
                 true => {
-                    self.gold += item.generate().rarity as u64;
+                    self.gold += item.rarity as u64;
                 }
                 false => {}
             }
@@ -104,23 +123,23 @@ impl AddAssign for Items {
 }
 
 impl Items {
-    pub fn new(items: HashSet<ItemsWeHave>, gold: u64) -> Self {
+    pub fn new(items: HashSet<IndividualItem>, gold: u64) -> Self {
         Self { items, gold }
     }
 
-    pub fn remove(&mut self, item: &ItemsWeHave) -> bool {
+    pub fn remove(&mut self, item: &IndividualItem) -> bool {
         self.items.remove(item)
     }
 
-    pub fn push(&mut self, item: ItemsWeHave) {
-        match { self.items.insert(item) } {
+    pub fn push(&mut self, item: IndividualItem) {
+        match { self.items.insert(item.clone()) } {
             true => {
-                self.gold += item.generate().rarity as u64;
+                self.gold += item.rarity as u64;
             }
             false => {}
         }
     }
-    pub fn iter(&self) -> Iter<'_, ItemsWeHave> {
+    pub fn iter(&self) -> Iter<'_, IndividualItem> {
         self.items.iter()
     }
 
@@ -128,7 +147,7 @@ impl Items {
         let items = self
             .items
             .iter()
-            .filter(|item| item.generate().slot == slot)
+            .filter(|item| item.slot == slot)
             .cloned()
             .collect();
         Self {
@@ -137,15 +156,15 @@ impl Items {
         }
     }
 
-    pub fn take(&mut self, have_item: String) -> Option<ItemsWeHave> {
+    pub fn take(&mut self, have_item: String) -> Option<IndividualItem> {
         let mut item_to_return = None;
-        for item in &self.items {
-            if item.generate().name == have_item {
-                item_to_return = Some(*item);
-            }
+        let item = self.items.iter().find(|item| item.name == have_item);
+        if let Some(item) = item {
+            item_to_return = Some(item.clone());
         }
-        if let Some(item_to_return) = item_to_return {
-            self.items.remove(&item_to_return);
+
+        if let Some(item) = item_to_return.clone() {
+            self.items.remove(&item);
         }
         item_to_return
     }
@@ -153,14 +172,14 @@ impl Items {
     pub fn sell(&mut self, slot: Option<EquipmentSlot>) -> &mut Items {
         if let Some(slot) = slot {
             for item in &self.items {
-                if item.generate().slot == slot {
-                    self.gold += item.generate().rarity as u64;
+                if item.slot == slot {
+                    self.gold += item.rarity as u64;
                 }
             }
-            self.items.retain(|item| item.generate().slot != slot);
+            self.items.retain(|item| item.slot != slot);
         } else {
             for item in &self.items {
-                self.gold += item.generate().rarity as u64;
+                self.gold += item.rarity as u64;
             }
             self.items.clear();
         }
@@ -181,21 +200,21 @@ impl Items {
 
         if let Some(slot) = slot {
             for item in &self.items {
-                if item.generate().slot == *slot {
-                    self.gold += item.generate().rarity as u64;
+                if item.slot == *slot {
+                    self.gold += item.rarity as u64;
                 }
             }
-            self.items.retain(|item| item.generate().slot != *slot);
+            self.items.retain(|item| item.slot != *slot);
         } else {
             for item in &self.items {
-                self.gold += item.generate().rarity as u64;
+                self.gold += item.rarity as u64;
             }
             self.items.clear();
         }
 
         if let Some(known) = known {
             known.iter().for_each(|item| {
-                self.items.insert(*item);
+                self.items.insert(item.clone());
             });
         }
     }
@@ -217,47 +236,47 @@ impl Display for Items {
         let mut wondrous_items = EquipmentSlot::WondrousItem.to_string();
 
         for item in &self.items {
-            let slot = item.generate().slot;
+            let slot = &item.slot;
             match slot {
                 EquipmentSlot::Helmet => {
                     helms.push_str("\n\t\t⮁\t");
-                    helms.push_str(&item.generate().name);
+                    helms.push_str(&item.name);
                 }
                 EquipmentSlot::Armor => {
                     armors.push_str("\n\t\t⮁\t");
-                    armors.push_str(&item.generate().name);
+                    armors.push_str(&item.name);
                 }
                 EquipmentSlot::Legs => {
                     legs.push_str("\n\t\t⮁\t");
-                    legs.push_str(&item.generate().name);
+                    legs.push_str(&item.name);
                 }
                 EquipmentSlot::Feet => {
                     feet.push_str("\n\t\t⮁\t");
-                    feet.push_str(&item.generate().name);
+                    feet.push_str(&item.name);
                 }
                 EquipmentSlot::Hands => {
                     hands.push_str("\n\t\t⮁\t");
-                    hands.push_str(&item.generate().name);
+                    hands.push_str(&item.name);
                 }
                 EquipmentSlot::Weapon => {
                     weapons.push_str("\n\t\t⮁\t");
-                    weapons.push_str(&item.generate().name);
+                    weapons.push_str(&item.name);
                 }
                 EquipmentSlot::Shield => {
                     shields.push_str("\n\t\t⮁\t");
-                    shields.push_str(&item.generate().name);
+                    shields.push_str(&item.name);
                 }
                 EquipmentSlot::Ring => {
                     rings.push_str("\n\t\t⮁\t");
-                    rings.push_str(&item.generate().name);
+                    rings.push_str(&item.name);
                 }
                 EquipmentSlot::Amulet => {
                     amulets.push_str("\n\t\t⮁\t");
-                    amulets.push_str(&item.generate().name);
+                    amulets.push_str(&item.name);
                 }
                 EquipmentSlot::WondrousItem => {
                     wondrous_items.push_str("\n\t\t⮁\t");
-                    wondrous_items.push_str(&item.generate().name);
+                    wondrous_items.push_str(&item.name);
                 }
             }
         }
@@ -314,7 +333,7 @@ impl Display for Items {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq, Hash)]
 pub struct NameMe {
-    item: Option<ItemsWeHave>,
+    item: Option<IndividualItem>,
     slot: EquipmentSlot,
     player_equipped: bool,
 }
@@ -328,18 +347,20 @@ impl NameMe {
         }
     }
 
-    pub fn item(&self) -> Option<&ItemsWeHave> {
+    pub fn item(&self) -> Option<&IndividualItem> {
         self.item.as_ref()
     }
 
-    pub fn auto_equip(&mut self, new_item: ItemsWeHave) -> Option<ItemsWeHave> {
+    pub fn auto_equip(&mut self, new_item: IndividualItem) -> Option<IndividualItem> {
         if self.player_equipped {
             return Some(new_item);
         }
-        if let Some(item) = self.item {
-            if item.generate().rarity <= new_item.generate().rarity {
+
+        if self.item.is_some() {
+            if self.item.as_ref().unwrap().points <= new_item.points {
+                let i = self.item.clone();
                 self.item = Some(new_item);
-                Some(item)
+                i
             } else {
                 Some(new_item)
             }
@@ -349,11 +370,13 @@ impl NameMe {
         }
     }
 
-    pub fn equip(&mut self, new_item: ItemsWeHave) -> Option<ItemsWeHave> {
+    pub fn equip(&mut self, new_item: IndividualItem) -> Option<IndividualItem> {
         self.player_equipped = true;
-        if let Some(item) = self.item {
+
+        if self.item.is_some() {
+            let i = self.item.clone();
             self.item = Some(new_item);
-            Some(item)
+            i
         } else {
             self.item = Some(new_item);
             None
@@ -362,7 +385,7 @@ impl NameMe {
 
     pub fn damage(&self) -> HashMap<DamageType, i32> {
         if let Some(item) = &self.item {
-            item.generate().damage
+            item.damage.clone()
         } else {
             DamageType::damage_type_hash_map()
         }
@@ -370,7 +393,7 @@ impl NameMe {
 
     pub fn armor(&self) -> i32 {
         if let Some(item) = &self.item {
-            item.generate().armor
+            item.armor
         } else {
             0
         }
@@ -378,7 +401,7 @@ impl NameMe {
 
     pub fn dodge(&self) -> i32 {
         if let Some(item) = &self.item {
-            item.generate().dodge
+            item.dodge
         } else {
             0
         }
@@ -386,7 +409,7 @@ impl NameMe {
 
     pub fn action(&self) -> i32 {
         if let Some(item) = &self.item {
-            item.generate().action
+            item.action
         } else {
             0
         }
@@ -394,7 +417,7 @@ impl NameMe {
 
     pub fn attribute(&self) -> Attributes {
         if let Some(item) = &self.item {
-            item.generate().attribute_bonus
+            item.attribute_bonus.clone()
         } else {
             Attributes::zero()
         }
@@ -402,7 +425,7 @@ impl NameMe {
 
     pub fn resistance(&self) -> HashMap<ResistCategories, i32> {
         if let Some(item) = &self.item {
-            item.generate().resistance
+            item.resistance.clone()
         } else {
             ResistCategories::resist_category_hash_map()
         }
@@ -424,16 +447,16 @@ pub struct Equipment {
 }
 
 impl Equipment {
-    pub fn equip(&mut self, new_item: ItemsWeHave) -> Option<ItemsWeHave> {
-        let item = new_item.generate();
-        match item.slot {
-            EquipmentSlot::Helmet => self.helmet.equip(new_item),
-            EquipmentSlot::Armor => self.armor.equip(new_item),
-            EquipmentSlot::Legs => self.legs.equip(new_item),
-            EquipmentSlot::Feet => self.feet.equip(new_item),
-            EquipmentSlot::Hands => self.hands.equip(new_item),
-            EquipmentSlot::Weapon => self.weapon.equip(new_item),
-            EquipmentSlot::Shield => self.shield.equip(new_item),
+    pub fn equip(&mut self, new_item: IndividualItem) -> Option<IndividualItem> {
+        let item = new_item.clone();
+        match &item.slot {
+            EquipmentSlot::Helmet => self.helmet.equip(new_item.clone()),
+            EquipmentSlot::Armor => self.armor.equip(new_item.clone()),
+            EquipmentSlot::Legs => self.legs.equip(new_item.clone()),
+            EquipmentSlot::Feet => self.feet.equip(new_item.clone()),
+            EquipmentSlot::Hands => self.hands.equip(new_item.clone()),
+            EquipmentSlot::Weapon => self.weapon.equip(new_item.clone()),
+            EquipmentSlot::Shield => self.shield.equip(new_item.clone()),
             EquipmentSlot::Ring => {
                 if let Some((index, _)) = self
                     .ring
@@ -441,9 +464,9 @@ impl Equipment {
                     .enumerate()
                     .find(|(_index, ring)| !ring.player_equipped)
                 {
-                    self.ring[index].equip(new_item)
+                    self.ring[index].equip(new_item.clone())
                 } else {
-                    let old_ring = self.ring[0].equip(new_item);
+                    let old_ring = self.ring[0].equip(new_item.clone());
                     let one = self.ring[0].clone();
                     let two = self.ring[1].clone();
                     // Cannot mem::swap
@@ -452,7 +475,7 @@ impl Equipment {
                     old_ring
                 }
             }
-            EquipmentSlot::Amulet => self.amulet.equip(new_item),
+            EquipmentSlot::Amulet => self.amulet.equip(new_item.clone()),
             EquipmentSlot::WondrousItem => {
                 if let Some((index, _)) = self
                     .wondrous_item
@@ -460,9 +483,9 @@ impl Equipment {
                     .enumerate()
                     .find(|(_index, wonder)| !wonder.player_equipped)
                 {
-                    self.wondrous_item[index].equip(new_item)
+                    self.wondrous_item[index].equip(new_item.clone())
                 } else {
-                    let old_wonder = self.wondrous_item[0].equip(new_item);
+                    let old_wonder = self.wondrous_item[0].equip(new_item.clone());
                     let one = self.wondrous_item[0].clone();
                     let two = self.wondrous_item[1].clone();
                     let three = self.wondrous_item[2].clone();
@@ -476,8 +499,8 @@ impl Equipment {
         }
     }
 
-    pub(crate) fn auto_equip(&mut self, new_item: ItemsWeHave) -> Option<ItemsWeHave> {
-        let item = new_item.generate();
+    pub(crate) fn auto_equip(&mut self, new_item: IndividualItem) -> Option<IndividualItem> {
+        let item = new_item.clone();
         match item.slot {
             EquipmentSlot::Helmet => self.helmet.auto_equip(new_item),
             EquipmentSlot::Armor => self.armor.auto_equip(new_item),
@@ -491,7 +514,7 @@ impl Equipment {
                     .ring
                     .iter()
                     .enumerate()
-                    .min_by_key(|(_, item)| item.item().map(|x| x.generate().rarity))
+                    .min_by_key(|(_, item)| item.item().map(|x| x.rarity))
                     .unwrap()
                     .0;
                 self.ring[lowest_rarity_index].auto_equip(new_item)
@@ -502,7 +525,7 @@ impl Equipment {
                     .wondrous_item
                     .iter()
                     .enumerate()
-                    .min_by_key(|(_, item)| item.item().map(|x| x.generate().rarity))
+                    .min_by_key(|(_, item)| item.item().map(|x| x.rarity))
                     .unwrap()
                     .0;
                 self.wondrous_item[lowest_rarity_index].auto_equip(new_item)
@@ -715,49 +738,49 @@ impl Display for Equipment {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Helmet: ");
-            string.push_str(&helmet.generate().name);
+            string.push_str(&helmet.name);
         }
 
         if let Some(armor) = &self.armor.item() {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Armor: ");
-            string.push_str(&armor.generate().name);
+            string.push_str(&armor.name);
         }
 
         if let Some(legs) = &self.legs.item() {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Legs: ");
-            string.push_str(&legs.generate().name);
+            string.push_str(&legs.name);
         }
 
         if let Some(feet) = &self.feet.item() {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Feet: ");
-            string.push_str(&feet.generate().name);
+            string.push_str(&feet.name);
         }
 
         if let Some(hands) = &self.hands.item() {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Hands: ");
-            string.push_str(&hands.generate().name);
+            string.push_str(&hands.name);
         }
 
         if let Some(weapon) = &self.weapon.item() {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Weapon: ");
-            string.push_str(&weapon.generate().name);
+            string.push_str(&weapon.name);
         }
 
         if let Some(shield) = &self.shield.item() {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Shield: ");
-            string.push_str(&shield.generate().name);
+            string.push_str(&shield.name);
         }
 
         if self.ring.iter().any(|ring| ring.item().is_some()) {
@@ -768,7 +791,7 @@ impl Display for Equipment {
         for x in self.ring.iter() {
             if x.item().is_some() {
                 string.push_str("\n\t\t\t💍\t ");
-                string.push_str(&x.item().unwrap().generate().name);
+                string.push_str(&x.item().unwrap().name);
             }
         }
 
@@ -776,7 +799,7 @@ impl Display for Equipment {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str("Amulet: ");
-            string.push_str(&amulet.generate().name);
+            string.push_str(&amulet.name);
         }
 
         if self.wondrous_item.iter().any(|item| item.item().is_some()) {
@@ -787,41 +810,15 @@ impl Display for Equipment {
         for x in self.wondrous_item.iter() {
             if x.item().is_some() {
                 string.push_str("\n\t\t\t\t");
-                string.push_str(&x.item().unwrap().generate().name);
+                string.push_str(&x.item().unwrap().name);
             }
         }
 
         write!(f, "{}", string)
     }
 }
-#[cfg(test)]
-mod test {
 
-    #[test]
-    fn rarity_order() {
-        use crate::item::Rarity;
-        assert!(Rarity::Common > Rarity::Uncommon);
-        assert!(Rarity::Uncommon > Rarity::Rare);
-        assert!(Rarity::Rare > Rarity::VeryRare);
-        assert!(Rarity::VeryRare > Rarity::Epic);
-        assert!(Rarity::Epic > Rarity::Legendary);
-        assert!(Rarity::Legendary > Rarity::Artifact);
-        assert!(Rarity::Artifact > Rarity::Wondrous);
-        assert!(Rarity::Wondrous > Rarity::Unique);
-    }
-
-    #[test]
-    fn wondrous_item_equip() {
-        let wonder = crate::constructed::ItemsWeHave::generate_random_item_slot(
-            crate::item::EquipmentSlot::WondrousItem,
-        );
-        let mut equipment = crate::item::Equipment::default();
-        equipment.equip(wonder);
-        assert_eq!(equipment.wondrous_item[0].item(), Some(&wonder));
-    }
-}
-
-#[derive(Clone, Serialize, Deserialize, Debug)]
+#[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IndividualItem {
     pub(crate) name: String,
     pub(crate) description: String,
@@ -833,10 +830,37 @@ pub struct IndividualItem {
     pub(crate) attribute_bonus: Attributes,
     pub(crate) rarity: Rarity,
     pub(crate) action: i32,
+    pub(crate) points: u64,
 }
 
 impl IndividualItem {
     pub fn to_file(&self, path: String) {
         fs::write(path, serde_yaml::to_string(self).unwrap()).unwrap();
+    }
+}
+
+impl Hash for IndividualItem {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        // Hash the relevant fields of the struct
+        self.name.hash(state);
+        self.description.hash(state);
+        self.slot.hash(state);
+        self.armor.hash(state);
+        self.dodge.hash(state);
+
+        // Hash the resistance and damage HashMaps
+        for (category, value) in &self.resistance {
+            category.hash(state);
+            value.hash(state);
+        }
+        for (damage_type, value) in &self.damage {
+            damage_type.hash(state);
+            value.hash(state);
+        }
+
+        // Hash the attribute_bonus, rarity, and action fields
+        self.attribute_bonus.hash(state);
+        self.rarity.hash(state);
+        self.action.hash(state);
     }
 }

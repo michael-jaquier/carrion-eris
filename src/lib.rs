@@ -65,8 +65,9 @@ pub struct MobQueue {
 pub struct BattleInfo {
     pub action: Skill,
     pub enemy_action: String,
-    pub damage_dealt: i32,
-    pub damage_taken: i32,
+    pub enemy_healing_action: String,
+    pub player_damage: i32,
+    pub enemy_damage: i32,
     pub player_healing: i32,
     pub enemy_healing: i32,
     pub player_name: String,
@@ -76,6 +77,7 @@ pub struct BattleInfo {
     pub critical: bool,
     pub leveled_up: bool,
     pub monster_hp: i32,
+    pub enemy_level: u32,
     pub traits_available: u32,
     pub next_level: u64,
     pub experience_gained: u64,
@@ -84,6 +86,7 @@ pub struct BattleInfo {
     pub item_gained: Vec<IndividualItem>,
     pub number_of_player_attacks: i32,
     pub number_of_enemy_attacks: i32,
+    pub custom_text: Option<String>,
 }
 
 impl BattleInfo {
@@ -91,8 +94,8 @@ impl BattleInfo {
         Self {
             action: character.current_skill.skill(),
             enemy_action: "".to_string(),
-            damage_dealt: 0,
-            damage_taken: 0,
+            player_damage: 0,
+            enemy_damage: 0,
             player_healing: 0,
             enemy_healing: 0,
             player_name: character.name.clone(),
@@ -110,6 +113,9 @@ impl BattleInfo {
             item_gained: vec![],
             number_of_player_attacks: 0,
             number_of_enemy_attacks: 0,
+            custom_text: None,
+            enemy_level: enemy.level,
+            enemy_healing_action: "".to_string(),
         }
     }
 }
@@ -126,8 +132,12 @@ impl Display for BattleInfo {
         string.push_str(" with ");
         string.push_str(&self.action.to_string());
         string.push_str(" dealing ");
-        string.push_str(&self.damage_dealt.to_string());
-        string.push_str(" damage!");
+        if self.enemy_killed && self.player_damage == 0 {
+            string.push_str("INSTANT DEATH !!");
+        } else {
+            string.push_str(&self.player_damage.to_string());
+            string.push_str(" damage!");
+        }
         string.push_str("\t🎲");
         string.push_str("\n\t");
 
@@ -137,10 +147,31 @@ impl Display for BattleInfo {
             string.push_str(" is ");
             string.push_str(
                 &self
-                    .damage_dealt
+                    .player_damage
                     .saturating_div(self.number_of_player_attacks)
                     .to_string(),
             );
+            string.push_str("\t🎲");
+            string.push_str("\n\t")
+        }
+
+        if let Some(custom) = &self.custom_text {
+            string.push_str("🎲\t");
+            string.push_str(custom);
+            string.push_str("\t🎲");
+            string.push_str("\n\t");
+        }
+
+        if self.player_healing > 0 {
+            string.push_str("🎲\t");
+            string.push_str(&self.player_name);
+            string.push_str(" healed ");
+            string.push_str(&self.player_name);
+            string.push_str(" with ");
+            string.push_str(&self.action.to_string());
+            string.push_str(" regenerating ");
+            string.push_str(&self.player_healing.to_string());
+            string.push_str(" health!");
             string.push_str("\t🎲");
             string.push_str("\n\t");
         }
@@ -151,7 +182,7 @@ impl Display for BattleInfo {
         string.push_str(" experience!");
         string.push_str("\t🪨");
 
-        if self.damage_taken > 0 {
+        if self.enemy_damage > 0 {
             string.push_str("\n\t");
             string.push_str("🎲\t");
             string.push_str(&self.monster_name);
@@ -160,7 +191,7 @@ impl Display for BattleInfo {
             string.push_str(" with ");
             string.push_str(&self.enemy_action.to_string());
             string.push_str(" dealing ");
-            string.push_str(&self.damage_taken.to_string());
+            string.push_str(&self.enemy_damage.to_string());
             string.push_str(" damage!");
             string.push_str("\t🎲");
         }
@@ -170,9 +201,8 @@ impl Display for BattleInfo {
             string.push_str("🎲\t");
             string.push_str(&self.monster_name);
             string.push_str(" healed ");
-            string.push_str(&self.monster_name);
-            string.push_str(" with ");
-            string.push_str(&self.enemy_action.to_string());
+            string.push_str("with ");
+            string.push_str(&self.enemy_healing_action.to_string());
             string.push_str(" regenerating ");
             string.push_str(&self.enemy_healing.to_string());
             string.push_str(" health!");
@@ -263,26 +293,43 @@ pub fn exp_scaling(n: u32) -> u64 {
 }
 
 #[instrument(ret, level = Level::TRACE)]
+pub fn enemy_exp_scaling(n: u32) -> u64 {
+    level_up_scaling(n, Some(1.1))
+}
+
+#[instrument(ret, level = Level::TRACE)]
+pub fn enemy_defense_scaling(n: u32, grade: u32) -> u64 {
+    let n = n as f64;
+    let grade = grade as f64;
+    (n.powf(1.3) + grade.powf(1.3)) as u64
+}
+#[instrument(ret, level = Level::TRACE)]
+pub fn enemy_damage_scaling(n: u32) -> i32 {
+    let n = n as f64;
+    n.powf(1.1) as i32
+}
+
+#[instrument(ret, level = Level::TRACE)]
 pub fn level_up_scaling(n: u32, power: Option<f64>) -> u64 {
     let n = n as f64;
-    n.powf(power.unwrap_or(2.0)) as u64
+    n.powf(power.unwrap_or(1.3)) as u64
 }
 #[instrument(ret, level = Level::TRACE)]
 pub fn dodge_scaling(n: i32) -> f64 {
-    let n = n + 1;
-    100.0 - (100.0 * E.powf(-(n as f64).ln() / 12.0))
+    let n = n + 5;
+    100.0 - (100.0 * E.powf(-(n as f64 / 5.0).ln() / 4.0))
 }
 
 #[instrument(ret, level = Level::TRACE)]
 pub fn armor_scaling(n: i32) -> f64 {
-    let n = n + 1;
-    100.0 - (100.0 * E.powf(-(n as f64).ln() / 9.0))
+    let n = n + 5;
+    100.0 - (100.0 * E.powf(-(n as f64 / 5.0).ln() / 3.0))
 }
 
 #[instrument(ret, level = Level::TRACE)]
 pub fn resistance_scaling(n: i32) -> f64 {
-    let n = n + 1;
-    100.0 - (100.0 * E.powf(-(n as f64).ln() / 9.0))
+    let n = n + 9;
+    100.0 - (100.0 * E.powf(-(n as f64 / 9.0).ln() / 3.0))
 }
 
 trait ValidEnum {
@@ -296,4 +343,81 @@ trait EnemyEvents {
     fn alignment(&self) -> crate::unit::Alignment;
 
     fn vulnerability(&self) -> Option<damage::DamageType>;
+}
+
+#[cfg(test)]
+mod test {
+    use crate::{
+        character::Character,
+        damage::Defense,
+        enemy::{Enemy, Mob},
+    };
+
+    #[test]
+    fn enemy_legendary_defense_scaling() {
+        let mut charater: Character = Default::default();
+        charater.level = 30;
+        let enemy: Mob = Mob::Eldragor;
+        let enemy: Enemy = enemy.generate(charater.level);
+        let defense: Defense = (&enemy).into();
+
+        let mitigation = defense.defense(crate::damage::ResistCategories::Physical);
+        assert!(
+            mitigation > 72.,
+            "Defense: {:?} mitigation {:3}",
+            defense,
+            mitigation
+        );
+        assert!(
+            mitigation < 80.,
+            "Defense: {:?} mitigation {:3}",
+            defense,
+            mitigation
+        );
+    }
+
+    #[test]
+    fn enemy_legendary_defense_scaling_high_level() {
+        let mut charater: Character = Default::default();
+        charater.level = 150;
+        let enemy: Mob = Mob::Eldragor;
+        let enemy: Enemy = enemy.generate(charater.level);
+        let defense: Defense = (&enemy).into();
+
+        let mitigation = defense.defense(crate::damage::ResistCategories::Physical);
+        assert!(
+            mitigation > 80.,
+            "Defense: {:?} mitigation {}",
+            defense,
+            mitigation
+        );
+        assert!(
+            mitigation < 99.,
+            "Defense: {:?} mitigation {}",
+            defense,
+            mitigation
+        );
+    }
+
+    #[test]
+    fn enemy_common_defense_scaling() {
+        let mut charater: Character = Default::default();
+        charater.level = 30;
+        let enemy: Mob = Mob::Orc;
+        let enemy: Enemy = enemy.generate(charater.level);
+        let defense: Defense = (&enemy).into();
+        let mitigation = defense.defense(crate::damage::ResistCategories::Physical);
+        assert!(
+            mitigation > 33.,
+            "Defense: {:?} mitigation {}",
+            defense,
+            mitigation
+        );
+        assert!(
+            mitigation < 70.,
+            "Defense: {:?} mitigation {}",
+            defense,
+            mitigation
+        );
+    }
 }

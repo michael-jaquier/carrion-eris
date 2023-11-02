@@ -53,6 +53,18 @@ impl Attributes {
         }
     }
 
+    pub fn add(&mut self, attr: &str, value: i32) {
+        match attr.to_lowercase().as_str() {
+            "strength" => self.strength += value,
+            "dexterity" => self.dexterity += value,
+            "constitution" => self.constitution += value,
+            "intelligence" => self.intelligence += value,
+            "wisdom" => self.wisdom += value,
+            "charisma" => self.charisma += value,
+            _ => panic!("Invalid attribute"),
+        }
+    }
+
     pub(crate) fn sum(&self) -> i32 {
         let mut sum = 0;
         sum += self.strength;

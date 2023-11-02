@@ -1,3 +1,4 @@
+use crate::character::Character;
 use crate::unit::Attributes;
 use crate::BattleInfo;
 use eris_macro::{ErisDisplayEmoji, ErisValidEnum};
@@ -9,7 +10,8 @@ use std::collections::{HashMap, HashSet};
 use std::fmt::{Display, Formatter};
 use std::fs;
 use std::hash::Hash;
-use std::ops::AddAssign;
+use std::ops::{Add, AddAssign};
+use tracing::{info, trace};
 
 use crate::damage::{DamageType, ResistCategories};
 
@@ -67,6 +69,54 @@ pub enum Rarity {
     Artifact = 4,
     Wondrous = 3,
     Unique = 1,
+}
+
+impl Rarity {
+    pub fn item_points(&self) -> u64 {
+        use Rarity::*;
+        match self {
+            Common => 1000,
+            Uncommon => 2000,
+            Rare => 10_000,
+            VeryRare => 20_000,
+            Epic => 40_000,
+            Legendary => 180_000,
+            Artifact => 1_500_000,
+            Wondrous => 10_000_000,
+            Unique => 52_000_000,
+        }
+    }
+    // Return one rarity lower than the provided one
+    pub fn one_less(&self) -> Self {
+        use Rarity::*;
+        match self {
+            Common => Common,
+            Uncommon => Common,
+            Rare => Uncommon,
+            VeryRare => Rare,
+            Epic => VeryRare,
+            Legendary => Epic,
+            Artifact => Legendary,
+            Wondrous => Artifact,
+            Unique => Wondrous,
+        }
+    }
+}
+
+impl From<u64> for Rarity {
+    fn from(rarity: u64) -> Self {
+        match rarity {
+            0..=1000 => Rarity::Common,
+            1001..=2000 => Rarity::Uncommon,
+            2001..=10_000 => Rarity::Rare,
+            10_001..=20_000 => Rarity::VeryRare,
+            20_001..=40_000 => Rarity::Epic,
+            40_001..=180_000 => Rarity::Legendary,
+            180_001..=500_000 => Rarity::Artifact,
+            500_001..=1_000_000 => Rarity::Wondrous,
+            _ => Rarity::Unique,
+        }
+    }
 }
 
 impl From<String> for Rarity {
@@ -357,7 +407,9 @@ impl NameMe {
         }
 
         if self.item.is_some() {
-            if self.item.as_ref().unwrap().points <= new_item.points {
+            // Replace current item rarity goes lower as it goes up
+            // Use rarity here since it has a higher ceiling
+            if self.item.as_ref().unwrap().rarity >= new_item.rarity {
                 let i = self.item.clone();
                 self.item = Some(new_item);
                 i
@@ -447,6 +499,73 @@ pub struct Equipment {
 }
 
 impl Equipment {
+    pub fn boost(&mut self, items: Items, character: Character) -> HashSet<IndividualItem> {
+        let items_to_return: HashSet<IndividualItem> = items
+            .iter()
+            .filter(|item| item.rarity <= Rarity::Artifact)
+            .cloned()
+            .collect();
+        for item in items.items {
+            match item.slot {
+                EquipmentSlot::Helmet => {
+                    if let Some(helmet) = self.helmet.item.as_mut() {
+                        helmet.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::Armor => {
+                    if let Some(armor) = self.armor.item.as_mut() {
+                        armor.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::Legs => {
+                    if let Some(legs) = self.legs.item.as_mut() {
+                        legs.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::Feet => {
+                    if let Some(feet) = self.feet.item.as_mut() {
+                        feet.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::Hands => {
+                    if let Some(hands) = self.hands.item.as_mut() {
+                        hands.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::Weapon => {
+                    if let Some(weapon) = self.weapon.item.as_mut() {
+                        weapon.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::Shield => {
+                    if let Some(shield) = self.shield.item.as_mut() {
+                        shield.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::Ring => {
+                    for ring in &mut self.ring {
+                        if let Some(ring) = ring.item.as_mut() {
+                            ring.boost(item.clone(), &character);
+                        }
+                    }
+                }
+                EquipmentSlot::Amulet => {
+                    if let Some(amulet) = self.amulet.item.as_mut() {
+                        amulet.boost(item, &character);
+                    }
+                }
+                EquipmentSlot::WondrousItem => {
+                    for wonder in &mut self.wondrous_item {
+                        if let Some(wonder) = wonder.item.as_mut() {
+                            wonder.boost(item.clone(), &character);
+                        }
+                    }
+                }
+            }
+        }
+        items_to_return
+    }
+
     pub fn equip(&mut self, new_item: IndividualItem) -> Option<IndividualItem> {
         let item = new_item.clone();
         match &item.slot {
@@ -510,25 +629,25 @@ impl Equipment {
             EquipmentSlot::Weapon => self.weapon.auto_equip(new_item),
             EquipmentSlot::Shield => self.shield.auto_equip(new_item),
             EquipmentSlot::Ring => {
-                let lowest_rarity_index = self
+                let lowest_max_point_item = self
                     .ring
                     .iter()
                     .enumerate()
-                    .min_by_key(|(_, item)| item.item().map(|x| x.rarity))
+                    .min_by_key(|(_, item)| item.item().map(|x| x.rarity.item_points()))
                     .unwrap()
                     .0;
-                self.ring[lowest_rarity_index].auto_equip(new_item)
+                self.ring[lowest_max_point_item].auto_equip(new_item)
             }
             EquipmentSlot::Amulet => self.amulet.auto_equip(new_item),
             EquipmentSlot::WondrousItem => {
-                let lowest_rarity_index = self
+                let lowest_max_points_item = self
                     .wondrous_item
                     .iter()
                     .enumerate()
-                    .min_by_key(|(_, item)| item.item().map(|x| x.rarity))
+                    .min_by_key(|(_, item)| item.item().map(|x| x.rarity.item_points()))
                     .unwrap()
                     .0;
-                self.wondrous_item[lowest_rarity_index].auto_equip(new_item)
+                self.wondrous_item[lowest_max_points_item].auto_equip(new_item)
             }
         }
     }
@@ -820,22 +939,115 @@ impl Display for Equipment {
 
 #[derive(Clone, Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct IndividualItem {
-    pub(crate) name: String,
-    pub(crate) description: String,
-    pub(crate) slot: EquipmentSlot,
-    pub(crate) armor: i32,
-    pub(crate) dodge: i32,
-    pub(crate) resistance: HashMap<ResistCategories, i32>,
-    pub(crate) damage: HashMap<DamageType, i32>,
-    pub(crate) attribute_bonus: Attributes,
-    pub(crate) rarity: Rarity,
-    pub(crate) action: i32,
-    pub(crate) points: u64,
+    pub name: String,
+    pub description: String,
+    pub slot: EquipmentSlot,
+    pub armor: i32,
+    pub dodge: i32,
+    pub resistance: HashMap<ResistCategories, i32>,
+    pub damage: HashMap<DamageType, i32>,
+    pub attribute_bonus: Attributes,
+    pub rarity: Rarity,
+    pub action: i32,
+    pub points: u64,
+}
+
+impl AddAssign for IndividualItem {
+    fn add_assign(&mut self, rhs: Self) {
+        self.armor += rhs.armor;
+        self.dodge += rhs.dodge;
+        self.action += rhs.action;
+        self.points += rhs.points;
+        self.attribute_bonus += rhs.attribute_bonus;
+        self.damage
+            .iter_mut()
+            .for_each(|(k, v)| *v += rhs.damage.get(k).unwrap_or(&0));
+        self.resistance
+            .iter_mut()
+            .for_each(|(k, v)| *v += rhs.resistance.get(k).unwrap_or(&0));
+    }
+}
+
+impl Add for IndividualItem {
+    type Output = Self;
+
+    fn add(mut self, rhs: Self) -> Self::Output {
+        self += rhs;
+        self
+    }
 }
 
 impl IndividualItem {
     pub fn to_file(&self, path: String) {
         fs::write(path, serde_yaml::to_string(self).unwrap()).unwrap();
+    }
+
+    pub fn update_name(&mut self) {
+        let plus = IndividualItem::item_boosted(&self.name);
+        let rarity = self.rarity;
+        let mut stat = String::new();
+        if let Some(attribute) = self.attribute_bonus.max_stat() {
+            stat += format!("of {attribute} ").as_str();
+        }
+        let action_string = if self.action > 0 { "Unrelenting " } else { "" };
+
+        let mut name = String::new();
+        name += action_string;
+        name += format!("{rarity:?} ").as_str();
+        name += random_word::gen(random_word::Lang::En);
+        name += format!(" {:?} ", self.slot).as_str();
+        name += stat.as_str();
+        name += format!(" [+{plus}]").as_str();
+        self.name = name;
+    }
+
+    fn item_boosted(item_name: &str) -> u32 {
+        let re = regex::Regex::new(r"(\[\+\d+\])$").unwrap();
+
+        if let Some(caps) = re.captures(item_name) {
+            // If the name contains a "[+N]" suffix, increment N and replace it
+            let current_value = caps.get(1).unwrap().as_str();
+            current_value
+                .trim_start_matches("[+")
+                .trim_end_matches(']')
+                .parse::<u32>()
+                .unwrap()
+                + 1
+        } else {
+            1
+        }
+    }
+
+    pub fn boost(&mut self, sacrifice: IndividualItem, character: &Character) {
+        if self.slot != sacrifice.slot {
+            info!("Cannot boost item of different slot");
+            return;
+        }
+        if sacrifice.rarity <= Rarity::Artifact {
+            trace!("Cannot boost item of rarity Artifact or higher");
+            return;
+        }
+        let max_points = self.rarity.item_points();
+        let mut scale = 0.1;
+
+        if self.points >= max_points {
+            trace!("Item points exceeded. Cannot add item scaling points down a lot. {self:?}");
+            scale *= 0.1;
+        }
+
+        let sacrifice_points = (sacrifice.points as f64 * scale) as u64;
+        let attribute_scaling = character.current_skill.skill().attribute_scaling().expect(
+            "Cannot boost item without attribute scaling. This is a bug. Please report it.",
+        );
+        let element_scaling =
+            character.current_skill.skill().element().expect(
+                "Cannot boost item without element scaling. This is a bug. Please report it.",
+            );
+
+        let new_sacrifice: IndividualItem =
+            (element_scaling, attribute_scaling, sacrifice_points).into();
+        *self += new_sacrifice;
+        self.update_name();
     }
 }
 
@@ -862,5 +1074,110 @@ impl Hash for IndividualItem {
         self.attribute_bonus.hash(state);
         self.rarity.hash(state);
         self.action.hash(state);
+    }
+}
+
+#[cfg(test)]
+mod test {
+
+    use crate::{
+        character::Character,
+        damage::{DamageType, ResistCategories},
+        item::{EquipmentSlot, IndividualItem, Rarity},
+        unit::Attributes,
+    };
+
+    #[test]
+    fn adding_items_works() {
+        let mut item1 = IndividualItem {
+            name: "Test Item".to_string(),
+            description: "Test Description".to_string(),
+            slot: EquipmentSlot::Helmet,
+            armor: 1,
+            dodge: 1,
+            resistance: ResistCategories::resist_category_hash_map(),
+            damage: DamageType::damage_type_hash_map(),
+            attribute_bonus: Attributes::zero(),
+            rarity: Rarity::Common,
+            action: 1,
+            points: 1,
+        };
+
+        item1.damage.insert(DamageType::Fire, 3);
+        let mut item2 = IndividualItem {
+            name: "Test Item".to_string(),
+            description: "Test Description".to_string(),
+            slot: EquipmentSlot::Helmet,
+            armor: 1,
+            dodge: 1,
+            resistance: ResistCategories::resist_category_hash_map(),
+            damage: DamageType::damage_type_hash_map(),
+            attribute_bonus: Attributes::zero(),
+            rarity: Rarity::Common,
+            action: 1,
+            points: 1,
+        };
+        item2.damage.insert(DamageType::Fire, 3);
+        let mut item3 = IndividualItem {
+            name: "Test Item".to_string(),
+            description: "Test Description".to_string(),
+            slot: EquipmentSlot::Helmet,
+            armor: 1,
+            dodge: 1,
+            resistance: ResistCategories::resist_category_hash_map(),
+            damage: DamageType::damage_type_hash_map(),
+            attribute_bonus: Attributes::zero(),
+            rarity: Rarity::Common,
+            action: 1,
+            points: 1,
+        };
+        item3.damage.insert(DamageType::Fire, 3);
+        item3 += item1;
+        item3 += item2;
+        assert_eq!(item3.armor, 3);
+        assert_eq!(item3.dodge, 3);
+        assert_eq!(item3.action, 3);
+        assert_eq!(item3.points, 3);
+        assert_eq!(item3.damage.get(&DamageType::Fire).unwrap(), &9);
+    }
+
+    #[test]
+    fn item_boost_mutates_the_item() {
+        let mut item = IndividualItem {
+            name: "Test Item".to_string(),
+            description: "Test Description".to_string(),
+            slot: EquipmentSlot::Helmet,
+            armor: 1,
+            dodge: 1,
+            resistance: ResistCategories::resist_category_hash_map(),
+            damage: DamageType::damage_type_hash_map(),
+            attribute_bonus: Attributes::zero(),
+            rarity: Rarity::Common,
+            action: 1,
+            points: 1,
+        };
+        let sacrifice = IndividualItem {
+            name: "Test Item".to_string(),
+            description: "Test Description".to_string(),
+            slot: EquipmentSlot::Helmet,
+            armor: 1,
+            dodge: 1,
+            resistance: ResistCategories::resist_category_hash_map(),
+            damage: DamageType::damage_type_hash_map(),
+            attribute_bonus: Attributes::zero(),
+            rarity: Rarity::Common,
+            action: 1,
+            points: 200000,
+        };
+        let character: Character = Default::default();
+
+        let old_item = item.clone();
+        item.boost(sacrifice, &character);
+        item.name = old_item.name.clone();
+        println!("Boosted {:?}", item);
+        println!("\n");
+        println!("Original {:?}", old_item);
+        println!("\n");
+        assert_ne!(item, old_item)
     }
 }

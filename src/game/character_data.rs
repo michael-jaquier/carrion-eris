@@ -7,6 +7,7 @@ use crate::item::{IndividualItem, Items};
 use crate::skill::SkillSet;
 use rand::random;
 use std::collections::HashSet;
+
 use tracing::{info, trace, warn};
 
 pub struct CharacterData {
@@ -112,7 +113,7 @@ impl CharacterData {
 
             Mutations::AddEnemy(user_id, mob, count) => {
                 for _ in 0..count {
-                    let cost = mob.generate(&self.character).cost();
+                    let cost = mob.generate(self.character.level).cost();
                     self.items.gold = self.items.gold.saturating_sub(cost);
                     if self.items.gold < cost {
                         self.items.gold += cost;
@@ -141,7 +142,12 @@ impl CharacterData {
                     .filter_map(|item| self.character.equipment.auto_equip(item.clone()))
                     .collect();
 
-                self.items += Items::new(unset_items, items.gold);
+                let return_items = self
+                    .character
+                    .equipment
+                    .boost(Items::new(unset_items, 0), self.character.clone());
+
+                self.items += Items::new(return_items, items.gold);
                 BUFFER
                     .write()
                     .await
@@ -150,29 +156,45 @@ impl CharacterData {
 
             Mutations::UpdateEnemies(_user_id, battle_info) => {
                 let enemy = self.active_enemy.as_mut().unwrap();
-                enemy.health -= battle_info.damage_dealt;
+                enemy.health -= battle_info.player_damage;
                 enemy.health += battle_info.enemy_healing;
+                enemy.health = enemy.health.min(enemy.max_health() as i32);
 
-                if enemy.health <= 0 {
+                let enemy_level = if battle_info.enemy_damage == 0 {
+                    battle_info.enemy_level + 3
+                } else {
+                    (battle_info.enemy_level / 2).max(self.character.level)
+                };
+                trace!(
+                    "Enemy Level: {enemy_level} Player Level: {}",
+                    self.character.level
+                );
+
+                if battle_info.enemy_killed {
                     if self.enemies.is_empty() {
                         let mob: Mob = random();
-                        let enemy = mob.generate(&self.character);
+                        let enemy = mob.generate(enemy_level);
                         self.active_enemy = Some(enemy.clone());
                         return;
                     }
                     let enemy = self.enemies.remove(0);
-                    let enemy = enemy.generate(&self.character);
+
+                    let enemy = enemy.generate(enemy_level);
                     self.active_enemy = Some(enemy.clone());
                 }
             }
 
             Mutations::UpdatePlayer(_user_id, battle_info) => {
-                self.character.hp -= battle_info.damage_taken;
+                self.character.hp -= battle_info.enemy_damage;
                 self.character.hp += battle_info.player_healing;
 
+                // Heal after battle
                 if self.character.hp <= 0 {
                     self.character.hp = self.character.max_hp as i32;
                     return;
+                } else {
+                    self.character.hp += (self.character.max_hp / 4) as i32;
+                    self.character.hp = self.character.hp.min(self.character.max_hp as i32);
                 }
 
                 self.character.experience += battle_info.experience_gained;

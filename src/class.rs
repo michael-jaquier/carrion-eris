@@ -1,4 +1,4 @@
-use crate::skill::Skill;
+use crate::{skill::Skill, AttributeScaling};
 
 use eris_macro::{AttributeScaling, ErisDisplayEmoji, ErisValidEnum};
 
@@ -46,5 +46,8 @@ impl Classes {
             Classes::Sorcerer => Skill::FireBall,
             Classes::Paladin => Skill::Rapture,
         }
+    }
+    pub fn scaling(&self) -> String {
+        AttributeScaling::scaling(self).unwrap()
     }
 }

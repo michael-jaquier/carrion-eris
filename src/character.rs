@@ -68,12 +68,11 @@ impl Character {
         CharacterTraits::apply_traits(&self.traits)
     }
     pub fn experience_to_next_level(&self) -> u64 {
-        level_up_scaling(self.level, Some(1.0 + (self.level as f64).ln())) + self.level as u64 * 100
+        level_up_scaling(self.level, Some(2.3))
     }
 
     pub fn action_points(&self) -> i32 {
         let mut base_action_points: i32 = 1;
-        base_action_points += self.level as i32 / 20i32;
         base_action_points += self.mutations().action_points();
         base_action_points += self.equipment.action_points();
         base_action_points
@@ -146,8 +145,14 @@ impl Character {
 
     pub fn player_attack(&self, enemy: &Enemy, battle_info: &mut BattleInfo) {
         for _ in 0..self.action_points() {
+            let mut damage = self.current_skill.act(self, enemy);
+            damage.appy_unique_effects(self, enemy, battle_info);
+
+            if battle_info.enemy_killed {
+                break;
+            }
+
             battle_info.number_of_player_attacks += 1;
-            let damage = self.current_skill.act(self, enemy);
             let defense: Defense = enemy.into();
 
             if defense.dodge() {
@@ -160,27 +165,27 @@ impl Character {
                 damage_taken_pre - (damage_taken_pre as f64 * mitigation / 100.0) as i32;
 
             trace!(
-                "Mitigation: {} Damage Taken Pre: {} Damage Taken {} for damage type: {:?}",
+                "Mitigation: {:3} Damage Taken Pre: {} Damage Taken {} for damage type: {:?}",
                 mitigation,
                 damage_taken_pre,
                 damage_taken,
                 damage.dtype()
             );
-            let damage = damage.damage();
 
-            battle_info.damage_dealt += damage;
+            battle_info.player_damage += damage_taken;
             battle_info.monster_hp = enemy.health;
             debug!(
                 "{} attacked {} for {} damage! {} has {} hp",
-                self.name, enemy.kind, damage, enemy.kind, enemy.health
+                self.name, enemy.kind, damage_taken, enemy.kind, enemy.health
             );
             battle_info.skill_experience_gained += (enemy.experience / 10).max(1);
-            if battle_info.damage_dealt > enemy.health {
-                break;
+
+            if enemy.health <= (battle_info.player_damage - battle_info.enemy_healing) {
+                battle_info.enemy_killed = true;
             }
         }
 
-        if battle_info.damage_dealt > enemy.health {
+        if battle_info.enemy_killed {
             battle_info.item_gained.extend(enemy.items.clone());
             battle_info.enemy_killed = true;
             battle_info.gold_gained += enemy.gold;
@@ -203,8 +208,8 @@ impl Character {
         let defense: Defense = self.into();
         if damage.dtype() == DamageType::Healing {
             let heal = damage.damage();
-            battle_info.player_healing += heal;
-            battle_info.enemy_action = action.to_string();
+            battle_info.enemy_healing += heal;
+            battle_info.enemy_healing_action = action.to_string();
             battle_info.monster_name = enemy.kind.to_string();
             return;
         }
@@ -223,7 +228,10 @@ impl Character {
             damage_taken,
             damage.dtype()
         );
-        battle_info.damage_taken += damage_taken;
+        battle_info.enemy_damage += damage_taken;
+        if (battle_info.enemy_damage - battle_info.player_healing) > self.hp {
+            battle_info.player_killed = true;
+        }
         battle_info.enemy_action = action.to_string();
         battle_info.monster_name = enemy.kind.to_string();
     }

@@ -1,15 +1,14 @@
 use std::f64::consts::E;
 
-use crate::character::Character;
 use crate::damage::{Damage, DamageType};
 use crate::item::IndividualItem;
 use crate::skill::MobAction;
 use crate::unit::Attributes;
 use eris_macro::{ErisDisplayEmoji, ErisMob, ErisValidEnum};
 
-use crate::{level_up_scaling, sub_linear_scaling};
+use crate::{enemy_defense_scaling, enemy_exp_scaling, sub_linear_scaling};
 use rand::prelude::SliceRandom;
-use rand::{thread_rng, Rng};
+use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 
 use crate::unit::Alignment;
@@ -35,17 +34,15 @@ pub struct Enemy {
     actions: Vec<MobAction>,
 }
 impl Enemy {
-    fn linear_scaling(level: u32) -> u64 {
-        let mut rng = rand::thread_rng();
-        let base = level_up_scaling(level, Some(1.5));
-        rng.gen_range(base..2 * base)
-    }
-
     fn hp_gain(attributes: &Attributes, level: u32) -> u32 {
         let constitution = attributes.constitution as f64;
         let level = level as f64;
         let exp = E.powf(level.ln());
         ((level * constitution + exp) * E.powf(constitution.ln())) as u32 + level as u32 * 110
+    }
+
+    pub fn max_health(&self) -> u32 {
+        Enemy::hp_gain(&self.attributes, self.level)
     }
 
     pub fn alive(&self) -> bool {
@@ -58,6 +55,7 @@ impl Enemy {
     pub fn action(&self) -> (Damage, MobAction) {
         let mut rng = thread_rng();
         let action = self.actions.choose(&mut rng).expect("No Skill found");
+
         (action.base_damage(self), action.clone())
     }
 
@@ -111,10 +109,10 @@ impl MobGrade {
         let mut enemy = Enemy {
             kind: mob,
             level,
-            experience: Enemy::linear_scaling(level * mob.grade() as u32),
+            experience: enemy_exp_scaling(level),
             health: Enemy::hp_gain(&attributes, level) as i32,
-            defense: mob.grade() as i32,
-            resistance: mob.grade() as i32,
+            defense: enemy_defense_scaling(level, mob.grade() as u32) as i32,
+            resistance: enemy_defense_scaling(level, mob.grade() as u32) as i32,
             gold: sub_linear_scaling(level * mob.grade() as u32) as u64,
             items: vec![],
             state: EnemyState::Alive,
@@ -221,14 +219,16 @@ pub enum Mob {
 }
 
 impl Mob {
-    pub fn generate(&self, character: &Character) -> Enemy {
-        let enemy: Enemy = self.grade().to_enemy(*self, character.level);
+    pub fn generate(&self, level: u32) -> Enemy {
+        let enemy: Enemy = self.grade().to_enemy(*self, level);
         enemy
     }
 }
 
 #[cfg(test)]
 mod test {
+
+    use crate::character::Character;
 
     use super::*;
 
@@ -259,6 +259,20 @@ mod test {
             mobs.iter().filter(|&m| m == &Mob::Orc).count() > 2000,
             "Mob Grades: {:?}",
             mob_counts
+        );
+    }
+
+    #[test]
+    fn sane_exp_gains() {
+        let mut character = Character::new("sd".to_string(), 1, crate::class::Classes::Wizard);
+        character.level = 20;
+        let enemy = Mob::Orc.generate(character.level);
+        let nxt = character.experience_to_next_level();
+        assert!(
+            enemy.experience < nxt / 5,
+            "Enemy: {:?} Next: {}",
+            enemy.experience,
+            nxt
         );
     }
 }

@@ -64,13 +64,13 @@ impl GameData {
 
             if character.enemies.is_empty() {
                 let mob: Mob = random();
-                let enemy = mob.generate(&character.character);
+                let enemy = mob.generate(character.character.level);
                 character.active_enemy = Some(enemy.clone());
                 return;
             }
 
             let enemy = character.enemies.remove(0);
-            let enemy = enemy.generate(&character.character);
+            let enemy = enemy.generate(character.character.level);
             character.active_enemy = Some(enemy.clone());
         }
     }
@@ -81,11 +81,10 @@ impl GameData {
         for c in self.characters.values() {
             let enemy = c.active_enemy.as_ref().unwrap();
             let mut battle_info = BattleInfo::begin(&c.character, enemy);
-            while enemy.health > battle_info.damage_dealt
-                && c.character.hp > battle_info.damage_taken
-            {
+            while !battle_info.enemy_killed && !battle_info.player_killed {
                 c.character.player_attack(enemy, &mut battle_info);
-                if enemy.health > battle_info.damage_dealt {
+
+                if !battle_info.enemy_killed {
                     c.character.enemy_attack(enemy, &mut battle_info);
                 }
             }

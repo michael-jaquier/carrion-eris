@@ -3,16 +3,17 @@ use std::collections::HashMap;
 use derive_builder::Builder;
 use rand::distributions::Standard;
 use rand::prelude::Distribution;
+use rand::seq::SliceRandom;
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::ops::{Add, AddAssign};
 use strum::{EnumIter, IntoEnumIterator};
 
 use crate::unit::Alignment;
+use crate::BattleInfo;
 use crate::{armor_scaling, character::Character, dodge_scaling, enemy::Enemy, resistance_scaling};
 
-#[derive(Default)]
-
+#[derive(Default, Debug)]
 pub struct Defense {
     dodge: i32,
     armor: i32,
@@ -54,7 +55,7 @@ impl Defense {
     }
 
     pub fn dodge(&self) -> bool {
-        thread_rng().gen_bool(dodge_scaling(self.dodge).max(75.0) / 100.0)
+        thread_rng().gen_bool(dodge_scaling(self.dodge).max(85.0) / 100.0)
     }
 
     pub fn physical_mitigation(&self) -> f64 {
@@ -90,10 +91,8 @@ impl Defense {
 
     pub fn defense(&self, resist: ResistCategories) -> f64 {
         match resist {
-            ResistCategories::Physical => {
-                (self.physical_mitigation() + self.magical_suppress(resist)).min(75.0)
-            }
-            _ => self.magical_suppress(resist).min(75.0),
+            ResistCategories::Physical => (self.physical_mitigation()).min(99.8),
+            _ => self.magical_suppress(resist).min(99.8),
         }
     }
 }
@@ -173,6 +172,16 @@ pub enum DamageType {
     Universal,
 }
 
+impl Distribution<DamageType> for Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> DamageType {
+        // Select from any damage type except universal
+        let damage_types: Vec<DamageType> = DamageType::iter()
+            .filter(|x| *x != DamageType::Universal)
+            .collect();
+        *damage_types.choose(rng).unwrap()
+    }
+}
+
 impl DamageType {
     pub fn damage_type_hash_map() -> HashMap<DamageType, i32> {
         let mut hash = HashMap::new();
@@ -232,6 +241,85 @@ impl From<&str> for DamageType {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash, EnumIter)]
+pub enum UniqueDamageEffect {
+    Poison,
+    Bleed,
+    Burn,
+    Shock,
+    Curse,
+    Regenerate,
+    Invigorate,
+    Enrage,
+    Berserk,
+    Vampire,
+    Death,
+}
+
+impl UniqueDamageEffect {
+    pub fn apply(
+        &self,
+        player: &Character,
+        enemy: &Enemy,
+        self_damage: &Damage,
+        battle_info: &mut BattleInfo,
+    ) -> Damage {
+        let mut damage = Damage::zero(self_damage.dtype);
+        use UniqueDamageEffect::*;
+        match self {
+            Poison => {
+                damage.damage += enemy.health / 10;
+                battle_info.custom_text = Some("Poisoned".to_string());
+            }
+            Bleed => {
+                damage.damage += (enemy.health / 10) * self_damage.number_of_hits as i32;
+                battle_info.custom_text = Some("Bleeding".to_string());
+            }
+            Burn => {
+                damage.damage += enemy.health / 10;
+                battle_info.custom_text = Some("Burning".to_string());
+            }
+            Shock => {
+                damage.multiplier = 1.5;
+                battle_info.custom_text = Some("Shocked".to_string());
+            }
+            Curse => {
+                damage.multiplier = 1.5;
+                battle_info.custom_text = Some("Cursed".to_string());
+            }
+            Regenerate => {
+                battle_info.player_healing += (player.max_hp / 3u32) as i32;
+                battle_info.player_healing =
+                    battle_info.player_healing.min(battle_info.enemy_damage);
+                battle_info.custom_text = Some("Regenerating".to_string());
+            }
+            Invigorate => {
+                battle_info.player_healing += (player.max_hp) as i32;
+                battle_info.custom_text = Some("Invigorating".to_string());
+            }
+            Enrage => {
+                damage.crit_chance = 0.25;
+                damage.critical_multiplier += 1.5;
+                battle_info.custom_text = Some("Enraged".to_string());
+            }
+            Berserk => {
+                damage.number_of_hits += 2;
+                damage.number_of_hits = (self_damage.number_of_hits as f64 * 1.25) as u32;
+                battle_info.custom_text = Some("Berserk".to_string());
+            }
+            Vampire => {
+                battle_info.player_healing += damage.damage() / 4;
+                battle_info.custom_text = Some("Vampiric".to_string());
+            }
+            Death => {
+                battle_info.enemy_killed = true;
+                battle_info.custom_text = Some("Instant Death".to_string());
+            }
+        }
+        damage
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, Builder)]
 pub struct Damage {
     #[builder(default = "0")]
@@ -247,19 +335,35 @@ pub struct Damage {
     pub number_of_hits: u32,
     #[builder(setter(strip_option), default)]
     pub alignment: Option<Alignment>,
+    #[builder(default)]
+    pub unique_effect: Vec<UniqueDamageEffect>,
 }
 
 impl Damage {
     pub fn damage(&self) -> i32 {
         let mut damage = 0;
         for _ in 0..self.number_of_hits {
-            damage += self.damage * self.multiplier as i32;
+            damage += self.damage;
             if thread_rng().gen_bool(self.crit_chance) {
-                damage = (damage as f64 * self.critical_multiplier) as i32;
+                damage += (damage as f64 * self.critical_multiplier) as i32;
             }
         }
-
+        damage += (damage as f64 * self.multiplier) as i32;
         damage
+    }
+
+    pub fn appy_unique_effects(
+        &mut self,
+        player: &Character,
+        enemy: &Enemy,
+        battle_info: &mut BattleInfo,
+    ) {
+        let mut damage = Damage::zero(self.dtype);
+        for effect in self.unique_effect.iter() {
+            let mutated_damage = effect.apply(player, enemy, self, battle_info);
+            damage += mutated_damage;
+        }
+        *self += damage;
     }
 
     pub fn dtype(&self) -> DamageType {

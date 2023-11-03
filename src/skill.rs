@@ -1,12 +1,16 @@
 use crate::character::Character;
-use crate::damage::{Damage, DamageBuilder, DamageType};
+use crate::damage::{Damage, DamageBuilder, DamageType, UniqueDamageEffect};
 use crate::enemy::Enemy;
 use crate::unit::Attributes;
-use crate::{level_up_scaling, log_power_scale, AttributeScaling, ElementalScaling, EnemyEvents};
+use crate::{
+    enemy_damage_scaling, level_up_scaling, log_power_scale, AttributeScaling, ElementalScaling,
+    EnemyEvents,
+};
 use eris_macro::{AttributeScaling, ElementalScaling, ErisDisplayEmoji, ErisValidEnum};
 use rand::{thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use std::fmt::Display;
+use strum::IntoEnumIterator;
 
 #[derive(
     Debug,
@@ -21,6 +25,10 @@ use std::fmt::Display;
     Copy,
 )]
 pub enum Skill {
+    #[element("Dark")]
+    #[stat("intelligence")]
+    #[emoji("👻")]
+    AbsorbLife,
     #[element("air")]
     #[stat("intelligence")]
     #[emoji("🌪️")]
@@ -155,28 +163,43 @@ impl Skill {
     fn funky_scaling(&self, damage: &mut Damage, _player: &Character) {
         match self {
             Skill::Slash => {
-                damage.damage += 10;
                 damage.critical_multiplier = 2.0;
                 damage.crit_chance += 0.1;
+                if thread_rng().gen_bool(0.02) {
+                    damage.unique_effect.push(UniqueDamageEffect::Berserk)
+                }
             }
             Skill::MagicMissile => {
                 damage.number_of_hits = 5;
             }
             Skill::FireBall => {
+                if thread_rng().gen_bool(0.1) {
+                    damage.unique_effect.push(UniqueDamageEffect::Burn)
+                }
                 damage.critical_multiplier = 2.5;
                 damage.crit_chance = 0.15;
             }
             Skill::WaterBall => {
+                if thread_rng().gen_bool(0.1) {
+                    damage.unique_effect.push(UniqueDamageEffect::Shock)
+                }
                 damage.damage = 12;
             }
             Skill::EarthShatter => {
                 damage.damage = 20;
             }
             Skill::PoisonFlask => {
-                damage.damage = 5;
+                if thread_rng().gen_bool(0.2) {
+                    damage.unique_effect.push(UniqueDamageEffect::Poison)
+                }
             }
             Skill::SteelRain => {
-                damage.damage += 5;
+                if thread_rng().gen_bool(0.1) {
+                    damage.unique_effect.push(UniqueDamageEffect::Bleed)
+                }
+                damage.number_of_hits = 5;
+                damage.damage -= 15;
+                damage.multiplier = -0.2;
             }
             Skill::Tornado => {
                 damage.damage += 5;
@@ -193,26 +216,33 @@ impl Skill {
             }
             Skill::HolySmite => {
                 if thread_rng().gen_bool(0.01) {
-                    damage.multiplier = 10.0;
+                    damage.multiplier = 1.6;
                 };
                 damage.damage += 5;
             }
             Skill::DivineBlessing => {
-                damage.damage += 5;
+                if thread_rng().gen_bool(0.07) {
+                    damage.unique_effect.push(UniqueDamageEffect::Regenerate)
+                }
             }
             Skill::SuicidalPersuasion => {
                 if thread_rng().gen_bool(0.035) {
-                    damage.damage = 99999;
+                    damage.unique_effect.push(UniqueDamageEffect::Death)
                 };
             }
             Skill::Seduction => {
                 damage.damage += 5;
+                if thread_rng().gen_bool(0.15) {
+                    damage.unique_effect.push(UniqueDamageEffect::Curse)
+                }
             }
             Skill::Mesmerize => {
                 damage.damage += 5;
             }
             Skill::Excoriate => {
-                damage.damage += 5;
+                if thread_rng().gen_bool(0.1) {
+                    damage.unique_effect.push(UniqueDamageEffect::Burn)
+                }
             }
             Skill::ArcaneNeedle => {
                 damage.number_of_hits = 5;
@@ -240,12 +270,24 @@ impl Skill {
             }
             Skill::PrismaticHowl => {
                 damage.damage += 5;
+                if thread_rng().gen_bool(0.05) {
+                    damage.unique_effect.push(UniqueDamageEffect::Shock);
+                    damage.unique_effect.push(UniqueDamageEffect::Curse);
+                    damage.unique_effect.push(UniqueDamageEffect::Burn);
+                }
             }
             Skill::MightyBlow => {
                 damage.damage += 50;
+                if thread_rng().gen_bool(0.1) {
+                    damage.unique_effect.push(UniqueDamageEffect::Enrage);
+                }
             }
             Skill::NebulaHammer => {
                 damage.damage += 50;
+                if thread_rng().gen_bool(0.1) {
+                    damage.unique_effect.push(UniqueDamageEffect::Enrage);
+                    damage.unique_effect.push(UniqueDamageEffect::Berserk);
+                }
             }
             Skill::BruteForce => {
                 damage.damage += 25;
@@ -262,6 +304,13 @@ impl Skill {
             }
             Skill::EtherealCrush => {
                 damage.damage += thread_rng().gen_range(0..100);
+                if thread_rng().gen_bool(0.01) {
+                    damage.unique_effect.push(UniqueDamageEffect::Death);
+                }
+            }
+            Skill::AbsorbLife => {
+                let unique_effect: Vec<_> = UniqueDamageEffect::iter().collect();
+                damage.unique_effect.extend(unique_effect)
             }
         }
     }
@@ -276,7 +325,7 @@ impl Skill {
         self.funky_scaling(&mut base, player);
 
         let player_attributes = player.attributes.clone() + player.equipment.attribute();
-        let attribute_bonus = self.attribute(&player_attributes) * player.level as i32;
+        let attribute_bonus = self.attribute(&player_attributes);
         let elemental_bonus = self.elemental_scaling() * player.level as i32;
         base.damage +=
             (attribute_bonus + elemental_bonus).saturating_div(base.number_of_hits as i32);
@@ -292,7 +341,11 @@ impl Skill {
         }
     }
 
-    fn element(&self) -> Option<DamageType> {
+    pub fn attribute_scaling(&self) -> Option<String> {
+        AttributeScaling::scaling(self)
+    }
+
+    pub fn element(&self) -> Option<DamageType> {
         ElementalScaling::scaling(self)
     }
 
@@ -452,11 +505,18 @@ impl MobAction {
         let element = ElementalScaling::scaling(self).unwrap_or_default();
         let mut base = DamageBuilder::default()
             .dtype(element)
-            .damage(enemy.kind.grade() as i32 * enemy.level as i32)
+            .damage(enemy_damage_scaling(
+                enemy.kind.grade() as u32 + enemy.level,
+            ))
             .build()
             .unwrap();
         base.damage += self.attribute(&enemy.attributes);
         base.damage += self.elemental_scaling();
+
+        if ElementalScaling::scaling(self) == Some(DamageType::Healing) {
+            base.multiplier = 0.2;
+            base.crit_chance = 0.0;
+        }
         base
     }
 
@@ -487,7 +547,7 @@ impl MobAction {
                 DamageType::Existential => (0, 10),
                 DamageType::Boss => (0, 10),
                 DamageType::Prismatic => (0, 10),
-                DamageType::Healing => (0, 100),
+                DamageType::Healing => (0, 10),
                 DamageType::Universal => (0, 10),
             };
             return thread_rng().gen_range(bottom..top);
@@ -594,9 +654,11 @@ mod test {
         let skill = crate::skill::Skill::Slash;
         let skill_set = SkillSet::new(skill);
         let mob: Mob = random();
-        let enemy = mob.generate(&me);
+        let enemy = mob.generate(me.level);
         let damage = skill_set.act(&me, &enemy);
-        assert!(damage.damage() < 150, "Damage was {:?}", damage);
+        for _ in 0..100 {
+            assert!(damage.damage() < 250, "Damage was {:?}", damage);
+        }
     }
 
     #[test]
@@ -610,5 +672,30 @@ mod test {
             "Attribute was {:?}",
             skill.attribute(&attributes)
         );
+    }
+    #[test]
+    fn enemy_damage() {
+        let me = Character::new("sdf".to_string(), 23, Paladin);
+        let orc = crate::enemy::Mob::Orc;
+        let mut enemy = orc.generate(me.level);
+        let (damage, _action) = enemy.action();
+        for _n in 0..100 {
+            assert!(damage.damage() < 150, "Damage was {:?}", damage);
+        }
+        enemy.level = 60;
+        let (damage, _action) = enemy.action();
+        for _n in 0..100 {
+            let dmg = damage.damage();
+            assert!(dmg < 530, "Damage was {:?}", dmg);
+            assert!(dmg > 100, "Damage was {:?}", dmg);
+        }
+
+        enemy.kind = crate::enemy::Mob::Eldragor;
+        let (damage, _action) = enemy.action();
+        for _n in 0..100 {
+            let dmg = damage.damage();
+            assert!(dmg < 1430, "Damage was {:?}", dmg);
+            assert!(dmg > 200, "Damage was {:?}", dmg);
+        }
     }
 }

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use crate::damage::ResistCategories;
+
 use crate::{
     damage::DamageType,
     enemy::Enemy,
@@ -9,10 +10,11 @@ use crate::{
     EnemyEvents,
 };
 
-use rand::{prelude::Distribution, random, seq::SliceRandom, thread_rng, Rng};
+use rand::{prelude::Distribution, random, thread_rng, Rng};
 use random_word::Lang;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
+use tracing::trace;
 
 #[derive(EnumIter)]
 enum Choices {
@@ -44,6 +46,20 @@ enum AttributeChoices {
     Charisma,
 }
 
+impl Distribution<AttributeChoices> for rand::distributions::Standard {
+    fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> AttributeChoices {
+        match rng.gen_range(0..6) {
+            0 => AttributeChoices::Strength,
+            1 => AttributeChoices::Dexterity,
+            2 => AttributeChoices::Constitution,
+            3 => AttributeChoices::Intelligence,
+            4 => AttributeChoices::Wisdom,
+            5 => AttributeChoices::Charisma,
+            _ => panic!("Invalid choice"),
+        }
+    }
+}
+
 impl From<String> for AttributeChoices {
     fn from(s: String) -> Self {
         match s.to_lowercase().as_str() {
@@ -71,69 +87,76 @@ struct GeneratedItem {
 }
 
 impl GeneratedItem {
+    fn new(points: u64) -> Self {
+        if points == 0 {
+            trace!("Generated item with 0 points")
+        }
+        let damage = DamageType::damage_type_hash_map();
+        let resistance = ResistCategories::resist_category_hash_map();
+        Self {
+            points: points.max(1),
+            dodge: 0,
+            armor: 0,
+            resistance,
+            damage,
+            action: 0,
+            attribute_bonus: Attributes::zero(),
+            rarity: Rarity::Common,
+        }
+    }
     fn rarity(&self) -> Rarity {
-        if self.points <= 100 {
-            return Rarity::Common;
-        }
-        if self.points <= 300 {
-            return Rarity::Uncommon;
-        }
-        if self.points <= 1500 {
-            return Rarity::Rare;
-        }
-        if self.points <= 5000 {
-            return Rarity::Epic;
-        }
-        Rarity::Legendary
+        self.points.into()
     }
 
-    fn distribute_points(&mut self) {
+    fn distribute_points(&mut self, element: Option<DamageType>, attribute: Option<String>) {
         self.rarity = self.rarity();
         let mut rng = thread_rng();
-        let mut points = rng.gen_range(self.points / 2..self.points * 2);
+        let mut points = rng.gen_range(self.points / 2..self.points);
         self.points = points;
-        let mut action_rolls = self.points / 750;
+        let mut action_rolls = self.points / 3750;
+
         while action_rolls > 0 {
             let action = rng.gen_bool(0.015) as u64;
             self.action += action;
             action_rolls -= 1;
         }
 
-        points = points.saturating_sub(self.action * 500);
+        points = points.saturating_sub(self.action * 3750);
 
-        let mut attribute_points_to_give = self.points % 100;
+        let mut attribute_points_to_give = self.points / 1000;
         while attribute_points_to_give > 0 {
             let chance_for_attribute = rng.gen_bool(0.05);
             if chance_for_attribute {
-                match AttributeChoices::iter()
-                    .collect::<Vec<_>>()
-                    .choose(&mut rng)
-                    .expect("Failed to choose attribute")
-                {
-                    AttributeChoices::Strength => {
-                        self.attribute_bonus.strength += 1;
-                    }
-                    AttributeChoices::Dexterity => {
-                        self.attribute_bonus.dexterity += 1;
-                    }
-                    AttributeChoices::Constitution => {
-                        self.attribute_bonus.constitution += 1;
-                    }
-                    AttributeChoices::Intelligence => {
-                        self.attribute_bonus.intelligence += 1;
-                    }
-                    AttributeChoices::Wisdom => {
-                        self.attribute_bonus.wisdom += 1;
-                    }
-                    AttributeChoices::Charisma => {
-                        self.attribute_bonus.charisma += 1;
+                if let Some(ref attr) = attribute {
+                    self.attribute_bonus.add(attr, 1);
+                } else {
+                    let chosen: AttributeChoices = random();
+                    match chosen {
+                        AttributeChoices::Strength => {
+                            self.attribute_bonus.strength += 1;
+                        }
+                        AttributeChoices::Dexterity => {
+                            self.attribute_bonus.dexterity += 1;
+                        }
+                        AttributeChoices::Constitution => {
+                            self.attribute_bonus.constitution += 1;
+                        }
+                        AttributeChoices::Intelligence => {
+                            self.attribute_bonus.intelligence += 1;
+                        }
+                        AttributeChoices::Wisdom => {
+                            self.attribute_bonus.wisdom += 1;
+                        }
+                        AttributeChoices::Charisma => {
+                            self.attribute_bonus.charisma += 1;
+                        }
                     }
                 }
             }
             attribute_points_to_give -= 1;
         }
 
-        points = points.saturating_sub((self.attribute_bonus.sum() * 100).try_into().unwrap());
+        points = points.saturating_sub((self.attribute_bonus.sum() * 1000).try_into().unwrap());
 
         let damage_scaling = DamageType::iter().collect::<Vec<_>>().len();
         let resist_scaling = ResistCategories::iter().collect::<Vec<_>>().len();
@@ -141,33 +164,41 @@ impl GeneratedItem {
 
         while points > 0 {
             let choice: Choices = random();
+            let points_cost: u64;
             match choice {
                 Choices::Armor => {
                     let scale = (points / sum_scaling as u64).max(1);
                     let armor = rng.gen_range(0..scale);
-                    self.armor += armor;
-                    points = points.saturating_sub(armor);
+                    self.armor += armor.max(1);
+                    points_cost = armor;
                 }
                 Choices::Dodge => {
                     let scale = (points / sum_scaling as u64).max(1);
                     let dodge = rng.gen_range(0..scale);
-                    self.dodge += dodge;
-                    points = points.saturating_sub(dodge);
+                    self.dodge += dodge.max(1);
+                    points_cost = dodge;
                 }
                 Choices::Resistance => {
                     let scale = (points / sum_scaling as u64).max(1) * resist_scaling as u64;
-                    let resistance = rng.gen_range(0..scale);
+                    let resistance = rng.gen_range(0..scale).max(1);
                     let resist: ResistCategories = random();
                     self.resistance.insert(resist, resistance as i32);
-                    points = points.saturating_sub(resistance);
+                    points_cost = resistance;
                 }
                 Choices::Damage => {
                     let scale = (points / sum_scaling as u64).max(1) * damage_scaling as u64;
-                    let damage = rng.gen_range(0..scale);
-                    self.damage.insert(DamageType::Physical, damage as i32);
-                    points = points.saturating_sub(damage);
+                    let set_element: DamageType;
+                    if let Some(ele) = element {
+                        set_element = ele;
+                    } else {
+                        set_element = random();
+                    }
+                    let damage = rng.gen_range(0..scale).max(1);
+                    self.damage.insert(set_element, damage as i32);
+                    points_cost = damage;
                 }
             }
+            points = points.saturating_sub(points_cost * 5);
         }
     }
 
@@ -227,35 +258,22 @@ impl GeneratedItem {
 
 impl From<u64> for GeneratedItem {
     fn from(points: u64) -> Self {
-        let mut base = Self {
-            points,
-            dodge: 0,
-            armor: 0,
-            resistance: Default::default(),
-            damage: Default::default(),
-            action: 0,
-            attribute_bonus: Attributes::zero(),
-            rarity: Rarity::Common,
-        };
-        base.distribute_points();
+        let mut base = Self::new(points);
+        base.distribute_points(None, None);
         base
     }
 }
 
 impl From<Rarity> for GeneratedItem {
     fn from(rarity: Rarity) -> Self {
-        let points = match rarity {
-            Rarity::Common => 100,
-            Rarity::Uncommon => 300,
-            Rarity::Rare => 600,
-            Rarity::Epic => 1200,
-            Rarity::Legendary => 2000,
-            Rarity::VeryRare => 1700,
-            Rarity::Artifact => 2200,
-            Rarity::Wondrous => 2300,
-            Rarity::Unique => 3000,
-        };
-        Self::from(points)
+        // GeneratedItem can not be more rare than Legendary
+        if rarity < Rarity::Epic {
+            let points = Rarity::Epic.item_points();
+            Self::from(points)
+        } else {
+            let points = rarity.item_points();
+            Self::from(points)
+        }
     }
 }
 
@@ -265,8 +283,10 @@ impl From<&Enemy> for Vec<IndividualItem> {
         let level = enemy.level;
         let probabilty_of_drop = (grade as u32) as f64 / 200.0;
         if thread_rng().gen_bool(probabilty_of_drop) {
-            let points_range = 0..(grade as u64 * level as u64 * 2);
-            let points = thread_rng().gen_range(points_range);
+            let points_range = (grade as u64)..(grade as u64 * level as u64 * 2);
+            let points = thread_rng()
+                .gen_range(points_range)
+                .min(Rarity::Epic.item_points());
             vec![GeneratedItem::from(points).item()]
         } else {
             vec![]
@@ -274,10 +294,52 @@ impl From<&Enemy> for Vec<IndividualItem> {
     }
 }
 
+impl From<(DamageType, String, u64)> for GeneratedItem {
+    fn from((damage_type, attribute, points): (DamageType, String, u64)) -> Self {
+        let mut base = Self::new(points);
+        base.distribute_points(Some(damage_type), Some(attribute));
+        base
+    }
+}
+
+impl From<(DamageType, String, u64)> for IndividualItem {
+    fn from((damage_type, name, points): (DamageType, String, u64)) -> Self {
+        let generated: GeneratedItem = (damage_type, name, points).into();
+        generated.item()
+    }
+}
+
 #[cfg(test)]
 mod test {
 
+    use crate::{enemy::Mob, item::IndividualItem};
+
     use super::GeneratedItem;
+
+    #[test]
+    fn item_from_level_30_legendary_enemy() {
+        let mut character = crate::character::Character::default();
+        character.level = 30;
+        let enemy = Mob::Eldragor;
+        let enemy = enemy.generate(character.level);
+        let item: Vec<IndividualItem> = (&enemy).into();
+        for i in item.iter() {
+            assert!(i.points >= 600 / 2, "Points is too low {item:?}");
+            assert!(i.points <= 600 * 2, "Points is too high {item:?}");
+        }
+    }
+    #[test]
+    fn item_from_level_60_legendary_enemy() {
+        let mut character = crate::character::Character::default();
+        character.level = 60;
+        let enemy = Mob::Eldragor;
+        let enemy = enemy.generate(character.level);
+        let item: Vec<IndividualItem> = (&enemy).into();
+        for i in item.iter() {
+            assert!(i.points >= 1900 / 2, "Points is too low {item:?}");
+            assert!(i.points <= 1900 * 2, "Points is too high {item:?}");
+        }
+    }
 
     #[test]
     fn item_generation_range_for_rate() {
@@ -286,11 +348,11 @@ mod test {
             let item: GeneratedItem = rarity.into();
             let item = item.item();
             assert!(
-                item.points >= 600 / 2,
+                item.points >= rarity.item_points() / 2,
                 "Points is too low {item:?} iteration {n}"
             );
             assert!(
-                item.points <= 600 * 2,
+                item.points <= rarity.item_points() * 2,
                 "Points is too high {item:?} iteration {n}"
             );
             assert!(
@@ -299,27 +361,27 @@ mod test {
             );
 
             assert!(
-                item.damage.values().all(|&v| v <= 100),
+                item.damage.values().all(|&v| v <= 2000),
                 "Damage is too high {item:?} iteration {n}"
             );
             assert!(
-                item.resistance.values().all(|&v| v <= 100),
+                item.resistance.values().all(|&v| v <= 2000),
                 "Resistance is too high {item:?} iteration {n}"
             );
             assert!(
-                item.armor <= 100,
+                item.armor <= 1000,
                 "Armor is too high {item:?} iteration {n}"
             );
             assert!(
-                item.dodge <= 100,
+                item.dodge <= 1000,
                 "Dodge is too high {item:?} iteration {n}"
             );
             assert!(
-                item.action <= 1,
+                item.action <= 5,
                 "Action is too high {item:?} iteration {n}"
             );
             assert!(
-                item.attribute_bonus.sum() <= 100,
+                item.attribute_bonus.sum() <= 1000,
                 "Attribute is too high {item:?} iteration {n}"
             );
         }

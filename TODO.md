@@ -13,6 +13,7 @@
 
 * Add a multiplier based on "game speed" used for drop.exp.gold.etc
 * Create a pure file-based DB to lower compile times
+* More tests around core mechanics like auto equip
 
 # Traits
 

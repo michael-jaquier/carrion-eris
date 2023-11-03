@@ -51,7 +51,7 @@ impl serenity::client::EventHandler for Handler {
                 let mutations_task = tokio::spawn(async {
                     loop {
                         Buffer::mutations().await;
-                        sleep(Duration::from_millis(25)).await; // Wait 50ms between mutations
+                        sleep(Duration::from_millis(125)).await; // Wait 50ms between mutations
                     }
                 });
 

@@ -39,6 +39,8 @@ pub enum EquipmentSlot {
     Amulet,
     #[emoji("🎲")]
     WondrousItem,
+    #[emoji("📦")]
+    Inventory,
 }
 
 impl Distribution<EquipmentSlot> for Standard {
@@ -328,6 +330,10 @@ impl Display for Items {
                     wondrous_items.push_str("\n\t\t⮁\t");
                     wondrous_items.push_str(&item.name);
                 }
+                EquipmentSlot::Inventory => {
+                    string.push_str("\n\t\t⮁\t");
+                    string.push_str(&item.name);
+                }
             }
         }
 
@@ -499,6 +505,27 @@ pub struct Equipment {
 }
 
 impl Equipment {
+    pub fn sum(&self) -> IndividualItem {
+        let mut item = IndividualItem::new();
+
+        item += self.helmet.item().unwrap_or(&IndividualItem::new()).clone();
+        item += self.armor.item().unwrap_or(&IndividualItem::new()).clone();
+        item += self.legs.item().unwrap_or(&IndividualItem::new()).clone();
+        item += self.feet.item().unwrap_or(&IndividualItem::new()).clone();
+        item += self.hands.item().unwrap_or(&IndividualItem::new()).clone();
+        item += self.weapon.item().unwrap_or(&IndividualItem::new()).clone();
+        item += self.shield.item().unwrap_or(&IndividualItem::new()).clone();
+        item += self.amulet.item().unwrap_or(&IndividualItem::new()).clone();
+        for ring in &self.ring {
+            item += ring.item().unwrap_or(&IndividualItem::new()).clone();
+        }
+        for wonder in &self.wondrous_item {
+            item += wonder.item().unwrap_or(&IndividualItem::new()).clone();
+        }
+        item.slot = EquipmentSlot::Inventory;
+        item
+    }
+
     pub fn boost(&mut self, items: Items, character: Character) -> HashSet<IndividualItem> {
         let items_to_return: HashSet<IndividualItem> = items
             .iter()
@@ -561,6 +588,7 @@ impl Equipment {
                         }
                     }
                 }
+                EquipmentSlot::Inventory => {}
             }
         }
         items_to_return
@@ -615,6 +643,7 @@ impl Equipment {
                     old_wonder
                 }
             }
+            EquipmentSlot::Inventory => None,
         }
     }
 
@@ -649,6 +678,7 @@ impl Equipment {
                     .0;
                 self.wondrous_item[lowest_max_points_item].auto_equip(new_item)
             }
+            EquipmentSlot::Inventory => None,
         }
     }
 
@@ -952,6 +982,32 @@ pub struct IndividualItem {
     pub points: u64,
 }
 
+impl Display for IndividualItem {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut string = String::new();
+        string.push_str("\n```\n");
+        string.push_str(&self.name);
+        string.push('\n');
+        string.push_str(&self.description);
+        string.push('\n');
+        string.push_str(&format!("Armor: {}", self.armor));
+        string.push('\n');
+        string.push_str(&format!("Dodge: {}", self.dodge));
+        string.push('\n');
+        string.push_str(&format!("Action: {}", self.action));
+        string.push('\n');
+        string.push_str(&format!("Attributes:\n {}", self.attribute_bonus));
+        string.push('\n');
+        string.push_str(&format!("Damage: {:#?}", self.damage));
+        string.push('\n');
+        string.push_str(&format!("Resistance: {:#?}", self.resistance));
+        string.push('\n');
+        string.push_str(&format!("Points: {}", self.points));
+        string.push_str("\n```\n");
+        write!(f, "{}", string)
+    }
+}
+
 impl AddAssign for IndividualItem {
     fn add_assign(&mut self, rhs: Self) {
         self.armor += rhs.armor;
@@ -977,7 +1033,28 @@ impl Add for IndividualItem {
     }
 }
 
+impl Default for IndividualItem {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IndividualItem {
+    pub fn new() -> Self {
+        Self {
+            name: String::new(),
+            description: String::new(),
+            slot: EquipmentSlot::Helmet,
+            armor: 0,
+            dodge: 0,
+            resistance: ResistCategories::resist_category_hash_map(),
+            damage: DamageType::damage_type_hash_map(),
+            attribute_bonus: Attributes::zero(),
+            rarity: Rarity::Common,
+            action: 0,
+            points: 0,
+        }
+    }
     pub fn to_file(&self, path: String) {
         fs::write(path, serde_yaml::to_string(self).unwrap()).unwrap();
     }

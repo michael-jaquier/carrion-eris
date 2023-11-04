@@ -618,10 +618,17 @@ impl SkillSet {
         self.skill
     }
 
-    pub fn act(&self, player: &Character, _enemy: &Enemy) -> Damage {
+    pub fn act(&self, player: &Character, enemy: &Enemy) -> Damage {
         let mut base = self.skill().base_damage(player);
         base.damage += self.action_experience_scaling();
-        base += player.mutations().get_damage(base.dtype()).clone();
+        let mutations = player.mutations();
+        base += mutations
+            .get_damage(
+                base.dtype(),
+                self.skill().attribute_scaling().unwrap_or_default(),
+                enemy.kind.alignment(),
+            )
+            .clone();
         base.damage += *player.equipment.damage().get(&base.dtype).unwrap_or(&0);
         base.damage += *player
             .equipment

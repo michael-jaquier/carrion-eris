@@ -15,7 +15,6 @@ pub enum TraitMutation {
     MultiplicativeBonus(f64),
 
     ActionBonus(i32),
-    AlignmentBonus(Alignment, i32),
     CriticalMultiplier(f64),
     CriticalChance(f64),
 }
@@ -32,6 +31,10 @@ pub struct TraitMutations {
 }
 
 impl TraitMutations {
+    fn new() -> Self {
+        Self::default()
+    }
+
     fn set_actions(&mut self, tr: TraitMutation) {
         if let TraitMutation::ActionBonus(times) = tr {
             self.actions += times;
@@ -99,7 +102,14 @@ impl TraitMutations {
         self.suppress.clone()
     }
 
-    pub fn get_damage(&self, dtype: DamageType) -> Damage {
+    pub fn get_damage(&self, dtype: DamageType, stat: String, alignment: Alignment) -> Damage {
+        let mut damage = self.get_elemental_damage(dtype);
+        damage += self.get_attribute_damage(stat);
+        damage += self.get_alignment_damage(alignment);
+        damage
+    }
+
+    pub fn get_elemental_damage(&self, dtype: DamageType) -> Damage {
         let universal = self
             .damage
             .get(&DamageType::Universal)
@@ -131,8 +141,25 @@ impl TraitMutations {
         }
     }
 
+    fn get_attribute_damage(&self, attribute: String) -> Damage {
+        let attribute_damage = self
+            .stat_damage
+            .get(&attribute)
+            .unwrap_or(&Damage::zero(DamageType::Universal))
+            .clone();
+        attribute_damage
+    }
+    fn get_alignment_damage(&self, alignment: Alignment) -> Damage {
+        let alignment_damage = self
+            .alignment_damage
+            .get(&alignment)
+            .unwrap_or(&Damage::zero(DamageType::Universal))
+            .clone();
+        alignment_damage
+    }
+
     fn set_alignment_damage(&mut self, alignment: Alignment, tr: TraitMutation) {
-        let damage = DamageBuilder::default()
+        let mut damage = DamageBuilder::default()
             .damage(0)
             .multiplier(0.0)
             .crit_chance(0.0)
@@ -143,41 +170,31 @@ impl TraitMutations {
             .unwrap();
         match tr {
             TraitMutation::FlatIncrease(e) => {
-                self.alignment_damage
-                    .entry(alignment)
-                    .and_modify(|d| d.damage += e)
-                    .or_insert(damage.clone());
+                damage.damage += e;
             }
             TraitMutation::FlatDecrease(e) => {
-                self.alignment_damage
-                    .entry(alignment)
-                    .and_modify(|d| d.damage += -e)
-                    .or_insert(damage.clone());
+                damage.damage += -e;
             }
             TraitMutation::CriticalChance(e) => {
-                self.alignment_damage
-                    .entry(alignment)
-                    .and_modify(|d| d.crit_chance += e)
-                    .or_insert(damage.clone());
+                damage.crit_chance += e;
             }
             TraitMutation::CriticalMultiplier(e) => {
-                self.alignment_damage
-                    .entry(alignment)
-                    .and_modify(|d| d.critical_multiplier += e)
-                    .or_insert(damage.clone());
+                damage.critical_multiplier += e;
             }
             TraitMutation::MultiplicativeBonus(e) => {
-                self.alignment_damage
-                    .entry(alignment)
-                    .and_modify(|d| d.multiplier += e)
-                    .or_insert(damage.clone());
+                damage.multiplier += e;
             }
+
             _ => {}
         }
+        self.alignment_damage
+            .entry(alignment)
+            .and_modify(|d| *d += damage.clone())
+            .or_insert(damage.clone());
     }
 
     fn set_stat_damage(&mut self, stat: String, tr: TraitMutation) {
-        let damage = DamageBuilder::default()
+        let mut damage = DamageBuilder::default()
             .damage(0)
             .multiplier(0.0)
             .crit_chance(0.0)
@@ -188,41 +205,30 @@ impl TraitMutations {
             .unwrap();
         match tr {
             TraitMutation::FlatIncrease(e) => {
-                self.stat_damage
-                    .entry(stat)
-                    .and_modify(|d| d.damage += e)
-                    .or_insert(damage.clone());
+                damage.damage += e;
             }
             TraitMutation::FlatDecrease(e) => {
-                self.stat_damage
-                    .entry(stat)
-                    .and_modify(|d| d.damage += -e)
-                    .or_insert(damage.clone());
+                damage.damage += -e;
             }
             TraitMutation::CriticalChance(e) => {
-                self.stat_damage
-                    .entry(stat)
-                    .and_modify(|d| d.crit_chance += e)
-                    .or_insert(damage.clone());
+                damage.crit_chance += e;
             }
             TraitMutation::CriticalMultiplier(e) => {
-                self.stat_damage
-                    .entry(stat)
-                    .and_modify(|d| d.critical_multiplier += e)
-                    .or_insert(damage.clone());
+                damage.critical_multiplier += e;
             }
             TraitMutation::MultiplicativeBonus(e) => {
-                self.stat_damage
-                    .entry(stat)
-                    .and_modify(|d| d.multiplier += e)
-                    .or_insert(damage.clone());
+                damage.multiplier += e;
             }
             _ => {}
         }
+        self.stat_damage
+            .entry(stat)
+            .and_modify(|d| *d += damage.clone())
+            .or_insert(damage.clone());
     }
 
     fn set_damage(&mut self, dtype: DamageType, tr: TraitMutation) {
-        let damage = DamageBuilder::default()
+        let mut damage = DamageBuilder::default()
             .damage(0)
             .multiplier(0.0)
             .crit_chance(0.0)
@@ -233,37 +239,26 @@ impl TraitMutations {
             .unwrap();
         match tr {
             TraitMutation::FlatIncrease(e) => {
-                self.damage
-                    .entry(dtype)
-                    .and_modify(|d| d.damage += e)
-                    .or_insert(damage.clone());
+                damage.damage += e;
             }
             TraitMutation::FlatDecrease(e) => {
-                self.damage
-                    .entry(dtype)
-                    .and_modify(|d| d.damage += -e)
-                    .or_insert(damage.clone());
+                damage.damage += -e;
             }
             TraitMutation::CriticalChance(e) => {
-                self.damage
-                    .entry(dtype)
-                    .and_modify(|d| d.crit_chance += e)
-                    .or_insert(damage.clone());
+                damage.crit_chance += e;
             }
             TraitMutation::CriticalMultiplier(e) => {
-                self.damage
-                    .entry(dtype)
-                    .and_modify(|d| d.critical_multiplier += e)
-                    .or_insert(damage.clone());
+                damage.critical_multiplier += e;
             }
             TraitMutation::MultiplicativeBonus(e) => {
-                self.damage
-                    .entry(dtype)
-                    .and_modify(|d| d.multiplier += e)
-                    .or_insert(damage.clone());
+                damage.multiplier += e;
             }
             _ => {}
         }
+        self.damage
+            .entry(dtype)
+            .and_modify(|d| *d += damage.clone())
+            .or_insert(damage.clone());
     }
 }
 
@@ -329,18 +324,18 @@ impl CharacterTraits {
     }
 
     pub fn apply_traits(traits: &HashSet<CharacterTraits>) -> TraitMutations {
-        let mut trait_mutations = TraitMutations::default();
+        let mut trait_mutations = TraitMutations::new();
         for tr in traits {
             match tr {
                 CharacterTraits::Robust => {
-                    trait_mutations.set_armor(TraitMutation::MultiplicativeBonus(1.1));
-                    trait_mutations.set_armor(TraitMutation::FlatIncrease(10));
+                    trait_mutations.set_armor(TraitMutation::MultiplicativeBonus(1.9));
+                    trait_mutations.set_armor(TraitMutation::FlatIncrease(1000));
                     trait_mutations
-                        .set_suppress(ResistCategories::Physical, TraitMutation::FlatIncrease(30));
+                        .set_suppress(ResistCategories::Physical, TraitMutation::FlatIncrease(300));
                 }
                 CharacterTraits::Nimble => {
                     let traits = vec![
-                        TraitMutation::FlatIncrease(30),
+                        TraitMutation::FlatIncrease(300),
                         TraitMutation::MultiplicativeBonus(1.2),
                     ];
                     traits
@@ -350,7 +345,7 @@ impl CharacterTraits {
                 CharacterTraits::Genius => {
                     trait_mutations.set_stat_damage(
                         "intelligence".to_owned(),
-                        TraitMutation::FlatIncrease(20),
+                        TraitMutation::FlatIncrease(200),
                     );
                     trait_mutations.set_stat_damage(
                         "intelligence".to_owned(),
@@ -358,22 +353,21 @@ impl CharacterTraits {
                     );
                     trait_mutations.set_stat_damage(
                         "intelligence".to_owned(),
-                        TraitMutation::CriticalMultiplier(0.5),
+                        TraitMutation::CriticalMultiplier(1.5),
                     );
                 }
                 CharacterTraits::Lucky => {
-                    trait_mutations.set_dodge(TraitMutation::FlatIncrease(20));
+                    trait_mutations.set_dodge(TraitMutation::FlatIncrease(200));
                     trait_mutations.set_suppress(
                         ResistCategories::Prismatic,
-                        TraitMutation::MultiplicativeBonus(1.2),
+                        TraitMutation::MultiplicativeBonus(1.8),
                     );
                     trait_mutations
-                        .set_damage(DamageType::Universal, TraitMutation::CriticalChance(0.2))
+                        .set_damage(DamageType::Universal, TraitMutation::CriticalChance(1.7))
                 }
                 CharacterTraits::FolkHero => {
                     let mutations = vec![
-                        TraitMutation::FlatIncrease(20),
-                        TraitMutation::CriticalChance(0.1),
+                        TraitMutation::FlatIncrease(320),
                         TraitMutation::CriticalMultiplier(0.5),
                     ];
                     let alignments = vec![
@@ -389,42 +383,44 @@ impl CharacterTraits {
                 }
                 CharacterTraits::Charismatic => {
                     trait_mutations
-                        .set_stat_damage("charisma".to_owned(), TraitMutation::FlatIncrease(20));
+                        .set_stat_damage("charisma".to_owned(), TraitMutation::FlatIncrease(120));
                     trait_mutations
-                        .set_stat_damage("charisma".to_owned(), TraitMutation::CriticalChance(0.1));
+                        .set_stat_damage("charisma".to_owned(), TraitMutation::CriticalChance(0.3));
                     trait_mutations.set_stat_damage(
                         "charisma".to_owned(),
-                        TraitMutation::CriticalMultiplier(0.5),
+                        TraitMutation::CriticalMultiplier(2.5),
                     );
                 }
                 CharacterTraits::Strong => {
                     trait_mutations
-                        .set_damage(DamageType::Physical, TraitMutation::FlatIncrease(5));
+                        .set_damage(DamageType::Physical, TraitMutation::FlatIncrease(255));
                 }
 
                 CharacterTraits::Hermit => {
                     trait_mutations.set_suppress(
                         ResistCategories::Prismatic,
-                        TraitMutation::MultiplicativeBonus(1.2),
+                        TraitMutation::MultiplicativeBonus(2.2),
                     );
                 }
 
                 CharacterTraits::Addict => {
-                    trait_mutations.set_dodge(TraitMutation::FlatDecrease(20))
+                    trait_mutations.set_dodge(TraitMutation::FlatDecrease(200))
                 }
 
                 CharacterTraits::Cursed => {
+                    trait_mutations.set_suppress(
+                        ResistCategories::Universal,
+                        TraitMutation::FlatDecrease(2000),
+                    );
                     trait_mutations
-                        .set_suppress(ResistCategories::Universal, TraitMutation::FlatDecrease(20));
-                    trait_mutations
-                        .set_damage(DamageType::Universal, TraitMutation::FlatIncrease(5));
+                        .set_damage(DamageType::Universal, TraitMutation::FlatIncrease(250));
                 }
                 CharacterTraits::Unlucky => {}
                 CharacterTraits::Righteous => {
                     let traits = vec![
-                        TraitMutation::FlatIncrease(20),
-                        TraitMutation::CriticalChance(0.1),
-                        TraitMutation::CriticalMultiplier(0.5),
+                        TraitMutation::FlatIncrease(200),
+                        TraitMutation::CriticalChance(0.05),
+                        TraitMutation::CriticalMultiplier(1.5),
                     ];
                     let alignments = vec![
                         Alignment::ChaoticEvil,
@@ -440,27 +436,56 @@ impl CharacterTraits {
                 CharacterTraits::Greedy => {
                     trait_mutations.set_suppress(
                         ResistCategories::Prismatic,
-                        TraitMutation::MultiplicativeBonus(1.2),
+                        TraitMutation::MultiplicativeBonus(1.9),
                     );
-                    trait_mutations.set_damage(
-                        DamageType::Universal,
-                        TraitMutation::AlignmentBonus(Alignment::LawfulGood, 100),
+                    trait_mutations.set_alignment_damage(
+                        Alignment::LawfulGood,
+                        TraitMutation::FlatIncrease(1000),
                     )
                 }
                 CharacterTraits::Keen => {
                     trait_mutations
-                        .set_damage(DamageType::Universal, TraitMutation::CriticalChance(0.25));
+                        .set_damage(DamageType::Universal, TraitMutation::CriticalChance(0.10));
                     trait_mutations.set_damage(
                         DamageType::Universal,
-                        TraitMutation::CriticalMultiplier(1.5),
+                        TraitMutation::CriticalMultiplier(2.5),
                     );
                 }
                 CharacterTraits::Energetic => {
-                    trait_mutations.set_actions(TraitMutation::ActionBonus(1));
+                    trait_mutations.set_actions(TraitMutation::ActionBonus(3));
                 }
             }
         }
 
         trait_mutations
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn trait_mutatations_apply() {
+        let mut trait_mutations = TraitMutations::new();
+        let traits = vec![
+            TraitMutation::FlatIncrease(10),
+            TraitMutation::FlatDecrease(5),
+        ];
+        for t in traits {
+            trait_mutations.set_armor(t.clone());
+            trait_mutations.set_suppress(ResistCategories::Boss, t.clone());
+            trait_mutations.set_damage(DamageType::Universal, t.clone());
+            trait_mutations.set_alignment_damage(Alignment::LawfulGood, t.clone());
+            trait_mutations.set_stat_damage("strength".to_string(), t.clone());
+        }
+        assert!(trait_mutations.get_armor() == 5);
+        assert!(trait_mutations.get_suppress(ResistCategories::Boss) == 5);
+        let damage = trait_mutations.get_damage(
+            DamageType::Universal,
+            "strength".to_string(),
+            Alignment::LawfulGood,
+        );
+        assert!(damage.damage == 15);
     }
 }

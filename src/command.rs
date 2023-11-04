@@ -352,6 +352,27 @@ pub async fn items(
     Ok(())
 }
 
+#[poise::command(prefix_command, slash_command)]
+pub async fn sum(ctx: Context<'_>) -> Result<(), Error> {
+    let now = tokio::time::Instant::now();
+    let user_id = ctx.author().id.0;
+    match GAME.read().await.get_character(user_id) {
+        Some(items) => {
+            ctx.send(|b| {
+                b.content(format!("{}", items.equipment.sum()))
+                    .ephemeral(true)
+            })
+            .await?;
+        }
+        None => {
+            ctx.send(|b| b.content("No items found").ephemeral(true))
+                .await?;
+        }
+    }
+    info!("items finish {:?}", now.elapsed());
+    Ok(())
+}
+
 /// Equip a specific item
 #[poise::command(prefix_command, slash_command)]
 pub async fn equip(

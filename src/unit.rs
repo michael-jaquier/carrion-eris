@@ -5,6 +5,8 @@ use crate::log_power_scale;
 use crate::AttributeScaling;
 use serde::{Deserialize, Serialize};
 
+use std::fmt::Display;
+use std::fmt::Formatter;
 use std::ops::{Add, AddAssign, Sub};
 
 #[derive(Clone, Serialize, Deserialize, Debug, Default, PartialEq, Eq, Hash)]
@@ -15,6 +17,20 @@ pub struct Attributes {
     pub(crate) intelligence: i32,
     pub(crate) wisdom: i32,
     pub(crate) charisma: i32,
+}
+
+impl Display for Attributes {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        let mut s = String::new();
+        s.push('\n');
+        s.push_str(&format!("\tStrength: {}\n", self.strength));
+        s.push_str(&format!("\tDexterity: {}\n", self.dexterity));
+        s.push_str(&format!("\tConstitution: {}\n", self.constitution));
+        s.push_str(&format!("\tIntelligence: {}\n", self.intelligence));
+        s.push_str(&format!("\tWisdom: {}\n", self.wisdom));
+        s.push_str(&format!("\tCharisma: {}\n", self.charisma));
+        write!(f, "{}", s)
+    }
 }
 
 impl Attributes {

@@ -486,6 +486,7 @@ dependencies = [
 name = "carrion-eris"
 version = "0.1.0"
 dependencies = [
+ "dashmap",
  "derive_builder",
  "dotenv",
  "eris-macro",

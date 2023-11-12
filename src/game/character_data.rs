@@ -1,8 +1,8 @@
 use crate::character::Character;
-use crate::database::{Consumer, Database, Producer};
+use crate::database::Database;
 use crate::enemy::{Enemy, Mob};
 use crate::game::mutations::Mutations;
-use crate::game_loop::BUFFER;
+
 use crate::item::{IndividualItem, Items};
 use crate::skill::SkillSet;
 use rand::random;
@@ -10,19 +10,19 @@ use std::collections::HashSet;
 
 use tracing::{info, trace, warn};
 
+#[derive(Clone)]
 pub struct CharacterData {
     pub character: Character,
     pub enemies: Vec<Mob>,
     pub items: Items,
     pub user_id: u64,
     pub active_enemy: Option<Enemy>,
-    producer: Box<dyn Producer + Sync + Send>,
-    consumer: Box<dyn Consumer + Sync + Send>,
+    pub database: Database,
 }
 
 impl CharacterData {
     pub async fn init(character: &Character, database: Database) -> CharacterData {
-        let producer = database.get_producer();
+        let _producer = database.get_producer();
         let consumer = database.get_consumer();
         let items = consumer
             .get_items(character.user_id)
@@ -46,8 +46,7 @@ impl CharacterData {
             items: items.unwrap_or(Items::default()),
             user_id: character.user_id,
             active_enemy,
-            consumer,
-            producer,
+            database,
         }
     }
 
@@ -55,7 +54,8 @@ impl CharacterData {
         match mutation {
             Mutations::Skill(_, skill) => {
                 let _ = self
-                    .producer
+                    .database
+                    .get_producer()
                     .create_or_update_skill(
                         self.character.current_skill.clone(),
                         self.character.user_id,
@@ -64,8 +64,11 @@ impl CharacterData {
                     .map_err(|e| {
                         warn!("Failed to update skill: {:?}", e);
                     });
-                if let Ok(Some(known_skill)) =
-                    self.consumer.get_skill(&self.character, skill as u64).await
+                if let Ok(Some(known_skill)) = self
+                    .database
+                    .get_consumer()
+                    .get_skill(&self.character, skill as u64)
+                    .await
                 {
                     self.character.current_skill = known_skill;
                 } else {
@@ -73,7 +76,8 @@ impl CharacterData {
                 }
 
                 let _ = self
-                    .producer
+                    .database
+                    .get_producer()
                     .set_current_skill(self.character.current_skill.clone(), self.character.user_id)
                     .await
                     .map_err(|e| {
@@ -81,7 +85,7 @@ impl CharacterData {
                     });
             }
 
-            Mutations::Equip(user_id, item) => {
+            Mutations::Equip(_user_id, item) => {
                 let removed = self.items.remove(&item);
                 if !removed {
                     return;
@@ -90,10 +94,6 @@ impl CharacterData {
                 if let Some(old_item) = old_item {
                     self.items.push(old_item);
                 }
-                BUFFER
-                    .write()
-                    .await
-                    .add(Mutations::SynchronizeItems(user_id))
             }
 
             Mutations::Trait(_, trait_) => {
@@ -111,7 +111,7 @@ impl CharacterData {
                 info!("Traits: {:?}", self.character.get_traits());
             }
 
-            Mutations::AddEnemy(user_id, mob, count) => {
+            Mutations::AddEnemy(_user_id, mob, count) => {
                 for _ in 0..count {
                     let cost = mob.generate(self.character.level).cost();
                     self.items.gold = self.items.gold.saturating_sub(cost);
@@ -121,22 +121,14 @@ impl CharacterData {
                     }
                     self.enemies.push(mob);
                 }
-                BUFFER
-                    .write()
-                    .await
-                    .add(Mutations::SynchronizeEnemies(user_id));
             }
 
-            Mutations::Sell(user_id, slot, known_items) => {
+            Mutations::Sell(_user_id, slot, known_items) => {
                 self.items
                     .sell_with_knowledge(slot.as_ref(), known_items.as_ref());
-                BUFFER
-                    .write()
-                    .await
-                    .add(Mutations::SynchronizeItems(user_id))
             }
 
-            Mutations::NewItems(user_id, items) => {
+            Mutations::NewItems(_user_id, items) => {
                 let unset_items: HashSet<IndividualItem> = items
                     .iter()
                     .filter_map(|item| self.character.equipment.auto_equip(item.clone()))
@@ -148,16 +140,16 @@ impl CharacterData {
                     .boost(Items::new(unset_items, 0), self.character.clone());
 
                 self.items += Items::new(return_items, items.gold);
-                BUFFER
-                    .write()
-                    .await
-                    .add(Mutations::SynchronizeItems(user_id))
             }
 
             Mutations::UpdateEnemies(_user_id, battle_info) => {
                 let enemy = self.active_enemy.as_mut().unwrap();
                 enemy.health -= battle_info.player_damage;
-                enemy.health += battle_info.enemy_healing;
+                if battle_info.enemy_healing > 0 {
+                    let max_heal = enemy.health / 4;
+                    let heal = battle_info.enemy_healing.min(max_heal);
+                    enemy.health += heal;
+                }
                 enemy.health = enemy.health.min(enemy.max_health() as i32);
 
                 let enemy_level = if battle_info.enemy_damage == 0 {

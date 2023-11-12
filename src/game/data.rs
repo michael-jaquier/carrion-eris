@@ -6,14 +6,15 @@ use crate::character::Character;
 use crate::enemy::Mob;
 use crate::game::character_data::CharacterData;
 use crate::game::mutations::Mutations;
-use crate::game_loop::BUFFER;
+use crate::game_loop::get_buffer;
 use crate::BattleInfo;
+use dashmap::DashMap;
 use rand::random;
-use std::collections::HashMap;
+
 use tracing::{info, trace, warn};
 
 pub struct GameData {
-    pub characters: HashMap<u64, CharacterData>,
+    pub characters: DashMap<u64, CharacterData>,
     producer: Box<dyn Producer + Sync + Send>,
     consumer: Box<dyn Consumer + Sync + Send>,
     database: Database,
@@ -29,19 +30,19 @@ impl GameData {
     pub async fn init(&mut self) {
         let characters = self.consumer.get_all_characters().await.unwrap_or_default();
 
-        let mut game_data = HashMap::new();
+        let game_data = DashMap::new();
         for c in characters {
             let character_data = CharacterData::init(&c, Database::Surreal).await;
             game_data.insert(c.user_id, character_data);
         }
-        self.characters = game_data;
+        self.characters = game_data.clone();
         self.activate_enemies();
     }
 
     pub fn new() -> Self {
         let database = Database::Surreal;
         Self {
-            characters: HashMap::new(),
+            characters: DashMap::new(),
             producer: database.get_producer(),
             consumer: database.get_consumer(),
             database,
@@ -56,8 +57,8 @@ impl GameData {
         self.characters.get(&user_id).map(|c| c.items.clone())
     }
 
-    fn activate_enemies(&mut self) {
-        for character in self.characters.values_mut() {
+    fn activate_enemies(&self) {
+        for mut character in self.characters.iter_mut() {
             if character.active_enemy.is_some() {
                 return;
             }
@@ -75,40 +76,36 @@ impl GameData {
         }
     }
 
-    pub async fn battle(&self) -> BattleResult {
+    pub async fn battle(&self, character: u64) -> BattleResult {
         let mut battles = BattleResult::default();
 
-        for c in self.characters.values() {
-            let enemy = c.active_enemy.as_ref().unwrap();
-            let mut battle_info = BattleInfo::begin(&c.character, enemy);
-            while !battle_info.enemy_killed && !battle_info.player_killed {
-                c.character.player_attack(enemy, &mut battle_info);
+        let c = self.characters.get(&character).unwrap();
+        let enemy = c.active_enemy.as_ref().unwrap();
+        let mut battle_info = BattleInfo::begin(&c.character, enemy);
+        while !battle_info.enemy_killed && !battle_info.player_killed {
+            c.character.player_attack(enemy, &mut battle_info);
 
-                if !battle_info.enemy_killed {
-                    c.character.enemy_attack(enemy, &mut battle_info);
-                }
+            if !battle_info.enemy_killed {
+                c.character.enemy_attack(enemy, &mut battle_info);
             }
-
-            GameData::apply_battle_info(&battle_info, c).await;
-            battles.append_result(battle_info);
         }
+
+        GameData::apply_battle_info(&battle_info, c.user_id).await;
+        battles.append_result(battle_info);
+
         battles
     }
 
-    pub async fn apply_battle_info(battle_info: &BattleInfo, character: &CharacterData) {
-        let mut write_buffer = BUFFER.write().await;
-        write_buffer.add(Mutations::NewItems(character.user_id, battle_info.into()));
-        write_buffer.add(Mutations::UpdateEnemies(
-            character.user_id,
-            battle_info.clone(),
-        ));
-        write_buffer.add(Mutations::UpdatePlayer(
-            character.user_id,
-            battle_info.clone(),
-        ));
+    pub async fn apply_battle_info(battle_info: &BattleInfo, character_id: u64) {
+        let mutations = vec![
+            Mutations::UpdatePlayer(character_id, battle_info.clone()),
+            Mutations::UpdateEnemies(character_id, battle_info.clone()),
+            Mutations::NewItems(character_id, battle_info.into()),
+        ];
+        get_buffer().await.extend(mutations);
     }
 
-    pub async fn apply_global_mutations(&mut self, buffer: Vec<Mutations>) {
+    pub async fn apply_global_mutations(&self, buffer: Vec<Mutations>) {
         for mutation in &buffer {
             match mutation {
                 Mutations::Delete(user_id) => {
@@ -152,63 +149,52 @@ impl GameData {
                     info!("Created character: {}", character.user_id);
                 }
 
-                Mutations::SynchronizeEnemies(user_id) => {
-                    let now = tokio::time::Instant::now();
-                    let character = self.characters.get(user_id);
-                    if character.is_none() {
-                        continue;
-                    }
-                    let character = character.unwrap();
-                    let _ = self
-                        .producer
-                        .store_mob_queue(&character.character, character.enemies.clone())
-                        .await
-                        .map_err(|e| {
-                            warn!("Failed to store enemies: {:?}", e);
-                        });
-                    trace!("Stored enemies in {:?}", now.elapsed());
-                }
-
-                Mutations::SynchronizeItems(user_id) => {
-                    let now = tokio::time::Instant::now();
-                    let character = self.characters.get(user_id);
-                    if character.is_none() {
-                        continue;
-                    }
-                    let character = character.unwrap();
-                    let _ = self
-                        .producer
-                        .store_user_items(character.items.clone(), *user_id)
-                        .await
-                        .map_err(|e| {
-                            warn!("Failed to store items: {:?}", e);
-                        });
-                    trace!("Stored items in {:?}", now.elapsed());
-                }
-
                 _ => {}
             }
         }
     }
 
-    pub async fn apply_mutations(&mut self) {
-        {
-            let buffer = BUFFER.read().await.mutations.clone();
-            for mutation in buffer {
-                if let Some(c) = self.characters.get_mut(mutation.user_id()) {
-                    c.apply_mutation(mutation).await;
+    pub async fn apply_mutations(&self, character: u64) {
+        trace!("Applying Mutations");
+
+        if let Some(buffer) = get_buffer().await.get(&character) {
+            for mutation in buffer.clone().iter() {
+                if let Some(mut c) = self.characters.get_mut(mutation.user_id()) {
+                    c.apply_mutation(mutation.clone()).await;
                 }
             }
         }
 
-        let buffer = BUFFER.read().await.mutations.clone();
-        self.apply_global_mutations(buffer).await;
+        if let Some(buffer) = get_buffer().await.get(&character) {
+            self.apply_global_mutations(buffer.clone()).await;
+        }
     }
 
     pub async fn synchronize_db(&self) {
-        let now = tokio::time::Instant::now();
-        for character_data in self.characters.values() {
-            let character = character_data.character.clone();
+        let _now = tokio::time::Instant::now();
+        for character in self.characters.iter() {
+            let now = tokio::time::Instant::now();
+
+            let _ = self
+                .producer
+                .store_mob_queue(&character.character, character.enemies.clone())
+                .await
+                .map_err(|e| {
+                    warn!("Failed to store enemies: {:?}", e);
+                });
+            trace!("Stored enemies in {:?}", now.elapsed());
+
+            let now = tokio::time::Instant::now();
+            let _ = self
+                .producer
+                .store_user_items(character.items.clone(), character.user_id)
+                .await
+                .map_err(|e| {
+                    warn!("Failed to store items: {:?}", e);
+                });
+            trace!("Stored items in {:?}", now.elapsed());
+
+            let character = character.character.clone();
 
             let _ = self
                 .producer
@@ -217,7 +203,7 @@ impl GameData {
                 .map_err(|e| {
                     warn!("Failed to update character: {:?}", e);
                 });
-            trace!("Stored character in {:?}", now.elapsed());
+            info!("Stored character in {:?}", now.elapsed());
         }
     }
 }

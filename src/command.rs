@@ -12,7 +12,7 @@ use crate::item::EquipmentSlot;
 
 use crate::constructed::ItemsWeHave;
 use crate::game::mutations::Mutations;
-use crate::game_loop::{BUFFER, GAME};
+use crate::game_loop::{get_buffer, get_game};
 use tracing::{info, warn};
 
 /// Show this help menu
@@ -23,7 +23,7 @@ pub async fn help(
     #[autocomplete = "poise::builtins::autocomplete_command"]
     command: Option<String>,
 ) -> Result<(), Error> {
-    let buffer = BUFFER.read().await;
+    let buffer = get_buffer().await;
 
     println!("{:?}", buffer);
     poise::builtins::help(
@@ -53,8 +53,7 @@ pub async fn character_trait(
         let ctrait = CharacterTraits::try_from(ctrait);
         match ctrait {
             Ok(ctrait) => {
-                BUFFER.write().await.add(Mutations::Trait(id, ctrait));
-                BUFFER.write().await.add(Mutations::SynchronizePlayer(id));
+                get_buffer().await.add(Mutations::Trait(id, ctrait));
                 ctx.reply(format!(
                     "If the trait is unique will be set soon: {:}",
                     ctrait
@@ -89,10 +88,7 @@ pub async fn delete(
     info!("delete_character");
     info!("Command: {:?}", command);
     let now = tokio::time::Instant::now();
-    BUFFER
-        .write()
-        .await
-        .add(Mutations::Delete(ctx.author().id.0));
+    get_buffer().await.add(Mutations::Delete(ctx.author().id.0));
 
     ctx.reply("Deleted character").await?;
     info!("delete_character finish {:?}", now.elapsed());
@@ -122,8 +118,7 @@ pub async fn create(
                         .ephemeral(true)
                 })
                 .await?;
-                BUFFER
-                    .write()
+                get_buffer()
                     .await
                     .add(Mutations::Create(Box::new(new_character)));
             }
@@ -165,7 +160,7 @@ pub async fn me(
     let now = tokio::time::Instant::now();
     let user_id = ctx.author().id.0;
     info!("me start");
-    let character = GAME.clone().read().await.get_character(user_id);
+    let character = get_game().await.get_character(user_id);
     info!("me get_character");
     match character {
         Some(character) => {
@@ -180,10 +175,7 @@ pub async fn me(
                 .await?;
         }
     }
-    BUFFER
-        .write()
-        .await
-        .add(Mutations::SynchronizePlayer(user_id));
+
     info!("me finish {:?}", now.elapsed());
 
     Ok(())
@@ -204,11 +196,8 @@ pub async fn skill(
             let skill = Skill::try_from(command);
             match skill {
                 Ok(skill) => {
-                    BUFFER.write().await.add(Mutations::Skill(user_id, skill));
-                    BUFFER
-                        .write()
-                        .await
-                        .add(Mutations::SynchronizeSkills(user_id));
+                    get_buffer().await.add(Mutations::Skill(user_id, skill));
+
                     ctx.send(|b| {
                         b.content(format!("Skill set: {:}\n", skill))
                             .ephemeral(true)
@@ -254,21 +243,16 @@ pub async fn sell(
         let slot = EquipmentSlot::try_from(slot);
         match slot {
             Ok(slot) => {
-                let current_items = GAME.read().await.get_items(user_id);
+                let current_items = get_game().await.get_items(user_id);
 
                 ctx.send(|b| {
                     b.content(format!("Selling all items of type: {}", slot))
                         .ephemeral(true)
                 })
                 .await?;
-                BUFFER
-                    .write()
+                get_buffer()
                     .await
                     .add(Mutations::Sell(user_id, Some(slot), current_items));
-                BUFFER
-                    .write()
-                    .await
-                    .add(Mutations::SynchronizeItems(user_id));
             }
 
             Err(_) => {
@@ -287,9 +271,8 @@ pub async fn sell(
         ctx.send(|b| b.content("Selling all items").ephemeral(true))
             .await?;
 
-        let current_items = GAME.read().await.get_items(user_id);
-        BUFFER
-            .write()
+        let current_items = get_game().await.get_items(user_id);
+        get_buffer()
             .await
             .add(Mutations::Sell(user_id, None, current_items));
     }
@@ -309,7 +292,7 @@ pub async fn items(
     if let Some(slot) = slot {
         let slot = EquipmentSlot::try_from(slot);
         return match slot {
-            Ok(slot) => match GAME.read().await.get_items(user_id) {
+            Ok(slot) => match get_game().await.get_items(user_id) {
                 None => {
                     ctx.send(|b| b.content("No items found").ephemeral(true))
                         .await?;
@@ -338,7 +321,7 @@ pub async fn items(
             }
         };
     }
-    match GAME.read().await.get_items(user_id) {
+    match get_game().await.get_items(user_id) {
         Some(items) => {
             ctx.send(|b| b.content(format!("{}", items)).ephemeral(true))
                 .await?;
@@ -356,7 +339,7 @@ pub async fn items(
 pub async fn sum(ctx: Context<'_>) -> Result<(), Error> {
     let now = tokio::time::Instant::now();
     let user_id = ctx.author().id.0;
-    match GAME.read().await.get_character(user_id) {
+    match get_game().await.get_character(user_id) {
         Some(items) => {
             ctx.send(|b| {
                 b.content(format!("{}", items.equipment.sum()))
@@ -389,14 +372,9 @@ pub async fn equip(
         let item = ItemsWeHave::try_from(item);
         match item {
             Ok(item) => {
-                BUFFER
-                    .write()
+                get_buffer()
                     .await
                     .add(Mutations::Equip(user_id, item.generate()));
-                BUFFER
-                    .write()
-                    .await
-                    .add(Mutations::SynchronizeItems(user_id));
                 info!("equip finish {:?}", now.elapsed());
             }
             Err(_) => {
@@ -441,7 +419,7 @@ pub async fn battle(
                             .ephemeral(true)
                     })
                     .await?;
-                    BUFFER.write().await.add(Mutations::AddEnemy(
+                    get_buffer().await.add(Mutations::AddEnemy(
                         user_id,
                         enemy,
                         num_entries.unwrap_or(1),

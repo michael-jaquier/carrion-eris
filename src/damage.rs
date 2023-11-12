@@ -12,8 +12,8 @@ use strum::{EnumIter, IntoEnumIterator};
 use crate::unit::Alignment;
 use crate::BattleInfo;
 use crate::{armor_scaling, character::Character, dodge_scaling, enemy::Enemy, resistance_scaling};
-
 #[derive(Default, Debug)]
+
 pub struct Defense {
     dodge: i32,
     armor: i32,
@@ -342,6 +342,7 @@ pub struct Damage {
 impl Damage {
     pub fn damage(&self) -> i32 {
         let mut damage = 0;
+
         for _ in 0..self.number_of_hits {
             damage += self.damage;
             if thread_rng().gen_bool(self.crit_chance) {
@@ -390,6 +391,11 @@ impl AddAssign for Damage {
         self.critical_multiplier += rhs.critical_multiplier;
         self.crit_chance += rhs.crit_chance;
         self.number_of_hits += rhs.number_of_hits;
+        if self.crit_chance >= 1.0 {
+            let diff = self.crit_chance - 1.0;
+            self.critical_multiplier += diff * 100.0;
+            self.crit_chance = 0.99;
+        }
     }
 }
 

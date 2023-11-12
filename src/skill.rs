@@ -636,6 +636,7 @@ impl SkillSet {
             .get(&DamageType::Universal)
             .unwrap_or(&0);
         base.number_of_hits += player.equipment.action_points() as u32;
+
         base
     }
     pub fn experience_to_next_level(&self) -> u64 {

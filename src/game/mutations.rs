@@ -17,10 +17,6 @@ impl Mutations {
             Mutations::AddEnemy(user_id, _, _) => user_id,
             Mutations::Sell(user_id, _, _) => user_id,
             Mutations::NewItems(user_id, _) => user_id,
-            Mutations::SynchronizeEnemies(user_id) => user_id,
-            Mutations::SynchronizeItems(user_id) => user_id,
-            Mutations::SynchronizePlayer(user_id) => user_id,
-            Mutations::SynchronizeSkills(user_id) => user_id,
             Mutations::UpdateEnemies(user_id, _) => user_id,
             Mutations::UpdatePlayer(user_id, _) => user_id,
             Mutations::UpdateSkills(user_id, _) => user_id,
@@ -43,10 +39,4 @@ pub enum Mutations {
     UpdateEnemies(u64, BattleInfo),
     UpdatePlayer(u64, BattleInfo),
     UpdateSkills(u64, BattleInfo),
-
-    // Synchros
-    SynchronizeEnemies(u64),
-    SynchronizeItems(u64),
-    SynchronizePlayer(u64),
-    SynchronizeSkills(u64),
 }

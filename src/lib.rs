@@ -35,6 +35,7 @@ use skill::Skill;
 
 use crate::character::Character;
 use crate::enemy::{Enemy, Mob};
+use crate::game_loop::HEARTBEAT_INTERVAL;
 
 use std::fmt::{Display, Formatter};
 
@@ -294,7 +295,8 @@ pub fn exp_scaling(n: u32) -> u64 {
 
 #[instrument(ret, level = Level::TRACE)]
 pub fn enemy_exp_scaling(n: u32) -> u64 {
-    level_up_scaling(n, Some(1.1))
+    let heartbeat_scaling = HEARTBEAT_INTERVAL.as_secs() as f64 / 10.0;
+    level_up_scaling(n, Some(1.1)) * (heartbeat_scaling as u64).max(1)
 }
 
 #[instrument(ret, level = Level::TRACE)]

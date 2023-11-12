@@ -1,34 +1,98 @@
+use dashmap::DashMap;
+use tracing::error;
+
 use crate::game::mutations::Mutations;
-use crate::game_loop::{BUFFER, GAME};
+use crate::game_loop::{get_buffer, get_game};
+
+type MutationVector = Vec<Mutations>;
 
 #[derive(Debug, Clone, Default)]
 pub struct Buffer {
-    pub mutations: Vec<Mutations>,
+    pub mutations: DashMap<u64, MutationVector>,
 }
 
 impl Buffer {
     pub fn new() -> Self {
-        Self { mutations: vec![] }
+        Self {
+            mutations: DashMap::new(),
+        }
     }
 
-    pub fn add(&mut self, mutation: Mutations) {
-        self.mutations.push(mutation);
+    pub fn extend(&self, mutation: Vec<Mutations>) {
+        let mut m = false;
+        let mut retries = 0;
+        let key = *mutation[0].user_id();
+        while !m {
+            match self.mutations.try_get(&key) {
+                dashmap::try_result::TryResult::Present(r) => {
+                    let mut mutations = r.value().clone();
+                    mutations.extend(mutation.clone());
+                    self.mutations.insert(key, mutation.clone());
+                    m = true;
+                }
+
+                dashmap::try_result::TryResult::Absent => {
+                    self.mutations.insert(key, mutation.clone());
+                    m = true;
+                }
+
+                dashmap::try_result::TryResult::Locked => {
+                    retries += 1;
+                    if retries > 10 {
+                        error!("Unable to get lock for mutations {:?}", mutation);
+                        break;
+                    }
+                }
+            }
+        }
     }
 
-    pub fn iter(&self) -> impl Iterator<Item = &Mutations> {
+    pub fn add(&self, mutation: Mutations) {
+        let mut m = false;
+        let mut retries = 0;
+        let key = *mutation.user_id();
+        let mut mutations_to_set = vec![mutation.clone()];
+        while !m {
+            match self.mutations.try_get(&key) {
+                dashmap::try_result::TryResult::Present(r) => {
+                    let mut mutations = r.value().clone();
+                    mutations.push(mutation.clone());
+                    mutations_to_set = mutations;
+                    self.mutations.insert(key, mutations_to_set.clone());
+                    m = true;
+                }
+
+                dashmap::try_result::TryResult::Absent => {
+                    self.mutations.insert(key, mutations_to_set.clone());
+                    m = true;
+                }
+
+                dashmap::try_result::TryResult::Locked => {
+                    retries += 1;
+                    if retries > 10 {
+                        error!("Unable to get lock for mutations {:?}", mutation);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn iter(&self) -> dashmap::iter::Iter<'_, u64, Vec<Mutations>> {
         self.mutations.iter()
     }
 
-    pub fn clear(&mut self) {
-        self.mutations.clear();
+    pub fn clear(&self, character: u64) {
+        self.mutations.remove(&character);
     }
-    pub async fn mutations() {
+
+    pub fn get(&self, key: &u64) -> Option<dashmap::mapref::one::Ref<'_, u64, Vec<Mutations>>> {
+        self.mutations.get(key)
+    }
+    pub async fn mutations(character: u64) {
         {
-            if !BUFFER.read().await.mutations.is_empty() {
-                let mut write_game = GAME.write().await;
-                write_game.apply_mutations().await;
-                BUFFER.write().await.clear();
-            }
+            get_game().await.apply_mutations(character).await;
+            get_buffer().await.clear(character);
         }
     }
 }

@@ -255,6 +255,7 @@ impl TraitMutations {
             }
             _ => {}
         }
+
         self.damage
             .entry(dtype)
             .and_modify(|d| *d += damage.clone())

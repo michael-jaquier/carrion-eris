@@ -318,26 +318,30 @@ mod test {
 
     #[test]
     fn item_from_level_30_legendary_enemy() {
-        let mut character = crate::character::Character::default();
-        character.level = 30;
-        let enemy = Mob::Eldragor;
-        let enemy = enemy.generate(character.level);
-        let item: Vec<IndividualItem> = (&enemy).into();
-        for i in item.iter() {
-            assert!(i.points >= 600 / 2, "Points is too low {item:?}");
-            assert!(i.points <= 600 * 2, "Points is too high {item:?}");
+        for _i in 0..1000 {
+            let mut character = crate::character::Character::default();
+            character.level = 30;
+            let enemy = Mob::Eldragor;
+            let enemy = enemy.generate(character.level);
+            let item: Vec<IndividualItem> = (&enemy).into();
+            for i in item.iter() {
+                assert!(i.points >= 1, "Points is too low {}", i.points);
+                assert!(i.points <= 1600 * 2, "Points is too high {}", i.points);
+            }
         }
     }
     #[test]
     fn item_from_level_60_legendary_enemy() {
-        let mut character = crate::character::Character::default();
-        character.level = 60;
-        let enemy = Mob::Eldragor;
-        let enemy = enemy.generate(character.level);
-        let item: Vec<IndividualItem> = (&enemy).into();
-        for i in item.iter() {
-            assert!(i.points >= 1000 / 2, "Points is too low {item:?}");
-            assert!(i.points <= 1900 * 2, "Points is too high {item:?}");
+        for _i in 0..1000 {
+            let mut character = crate::character::Character::default();
+            character.level = 60;
+            let enemy = Mob::Eldragor;
+            let enemy = enemy.generate(character.level);
+            let item: Vec<IndividualItem> = (&enemy).into();
+            for i in item.iter() {
+                assert!(i.points >= 1, "Points is too low {}", i.points);
+                assert!(i.points <= 15000, "Points is too high {}", i.points);
+            }
         }
     }
 

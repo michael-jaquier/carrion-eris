@@ -7,24 +7,26 @@ use poise::serenity_prelude as serenity;
 
 use std::time::Duration;
 
-use tracing::debug;
+use tracing::{debug, instrument};
 
 use carrion_eris::game_loop::Handler;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::EnvFilter;
 
+#[instrument]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().expect("Failed to read .env file");
     let filter = EnvFilter::from_default_env();
+    println!("Filter: {:?}", filter);
 
     // For me this is <> file:///Users/michael.jaquier/carrion-eris/ce.db
     let db = env::var("DATABASE_URL").expect("Expected a database url in the environment");
     SurrealDB::connect(&db).await?;
     tracing_subscriber::registry()
         .with(filter)
-        .with(tracing_subscriber::fmt::layer())
+        .with(tracing_subscriber::fmt::layer().compact())
         .init();
 
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");

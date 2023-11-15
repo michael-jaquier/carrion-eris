@@ -171,10 +171,7 @@ impl GameData {
     }
 
     pub async fn synchronize_db(&self) {
-        let _now = tokio::time::Instant::now();
         for character in self.characters.iter() {
-            let now = tokio::time::Instant::now();
-
             let _ = self
                 .producer
                 .store_mob_queue(&character.character, character.enemies.clone())
@@ -182,9 +179,7 @@ impl GameData {
                 .map_err(|e| {
                     warn!("Failed to store enemies: {:?}", e);
                 });
-            trace!("Stored enemies in {:?}", now.elapsed());
 
-            let now = tokio::time::Instant::now();
             let _ = self
                 .producer
                 .store_user_items(character.items.clone(), character.user_id)
@@ -192,7 +187,6 @@ impl GameData {
                 .map_err(|e| {
                     warn!("Failed to store items: {:?}", e);
                 });
-            trace!("Stored items in {:?}", now.elapsed());
 
             let character = character.character.clone();
 
@@ -203,7 +197,6 @@ impl GameData {
                 .map_err(|e| {
                     warn!("Failed to update character: {:?}", e);
                 });
-            info!("Stored character in {:?}", now.elapsed());
         }
     }
 }

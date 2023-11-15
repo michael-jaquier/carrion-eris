@@ -15,6 +15,11 @@ use crate::game::mutations::Mutations;
 use crate::game_loop::{get_buffer, get_game};
 use tracing::{info, warn};
 
+fn tracing_span(user_id: u64, now: tokio::time::Instant, request: String) -> tracing::Span {
+    let span = tracing::info_span!("commands", user_id = user_id, time = ?now.elapsed(), request = request);
+    info!(parent: &span, "command finished");
+    span
+}
 /// Show this help menu
 #[poise::command(prefix_command, track_edits, slash_command)]
 pub async fn help(
@@ -23,9 +28,6 @@ pub async fn help(
     #[autocomplete = "poise::builtins::autocomplete_command"]
     command: Option<String>,
 ) -> Result<(), Error> {
-    let buffer = get_buffer().await;
-
-    println!("{:?}", buffer);
     poise::builtins::help(
         ctx,
         command.as_deref(),
@@ -46,7 +48,6 @@ pub async fn character_trait(
     #[description = "Select a trait from the list of valid traits"]
     character_trait: Option<String>,
 ) -> Result<(), Error> {
-    info!("character_trait input {:?}", character_trait);
     let now = tokio::time::Instant::now();
     let id = ctx.author().id.0;
     if let Some(ctrait) = character_trait {
@@ -76,7 +77,7 @@ pub async fn character_trait(
         ))
         .await?;
     }
-    info!("character_trait finish {:?}", now.elapsed());
+    tracing_span(id, now, "character_trait".to_string());
     Ok(())
 }
 /// Delete your character and start over
@@ -91,7 +92,7 @@ pub async fn delete(
     get_buffer().await.add(Mutations::Delete(ctx.author().id.0));
 
     ctx.reply("Deleted character").await?;
-    info!("delete_character finish {:?}", now.elapsed());
+    tracing_span(ctx.author().id.0, now, "delete".to_string());
     Ok(())
 }
 
@@ -103,8 +104,6 @@ pub async fn create(
     #[description = "Create a character form the list of valid classes"]
     class: Option<String>,
 ) -> Result<(), Error> {
-    info!("create_character");
-    info!("Command: {:?}", class);
     let now = tokio::time::Instant::now();
     if let Some(class) = class {
         let class = Classes::try_from(class);
@@ -145,7 +144,7 @@ pub async fn create(
         })
         .await?;
     }
-    info!("create_character finish {:?}", now.elapsed());
+    tracing_span(ctx.author().id.0, now, "create".to_string());
     Ok(())
 }
 
@@ -159,9 +158,7 @@ pub async fn me(
 ) -> Result<(), Error> {
     let now = tokio::time::Instant::now();
     let user_id = ctx.author().id.0;
-    info!("me start");
     let character = get_game().await.get_character(user_id);
-    info!("me get_character");
     match character {
         Some(character) => {
             ctx.send(|b| {
@@ -176,8 +173,7 @@ pub async fn me(
         }
     }
 
-    info!("me finish {:?}", now.elapsed());
-
+    tracing_span(user_id, now, "me".to_string());
     Ok(())
 }
 
@@ -226,7 +222,7 @@ pub async fn skill(
             ctx.send(|b| b.content(responses).ephemeral(true)).await?;
         }
     }
-    info!("skill finish {:?}", now.elapsed());
+    tracing_span(user_id, now, "skill".to_string());
     Ok(())
 }
 /// Sell Items
@@ -316,7 +312,6 @@ pub async fn items(
                     .ephemeral(true)
                 })
                 .await?;
-                info!("items finish {:?}", now.elapsed());
                 Ok(())
             }
         };
@@ -331,7 +326,7 @@ pub async fn items(
                 .await?;
         }
     }
-    info!("items finish {:?}", now.elapsed());
+    tracing_span(user_id, now, "items".to_string());
     Ok(())
 }
 
@@ -352,7 +347,7 @@ pub async fn sum(ctx: Context<'_>) -> Result<(), Error> {
                 .await?;
         }
     }
-    info!("items finish {:?}", now.elapsed());
+    tracing_span(user_id, now, "sum".to_string());
     Ok(())
 }
 

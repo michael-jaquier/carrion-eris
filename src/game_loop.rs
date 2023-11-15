@@ -13,7 +13,7 @@ use crate::game::buffer::Buffer;
 use crate::game::data::GameData;
 use tokio::time::sleep;
 use tracing::trace;
-use tracing::{error, info};
+use tracing::{error, info, instrument, span, Level};
 
 static GAME: OnceCell<GameData> = OnceCell::const_new();
 static BUFFER: OnceCell<Buffer> = OnceCell::const_new();
@@ -43,7 +43,10 @@ pub async fn get_buffer() -> &'static Buffer {
     BUFFER.get_or_init(|| async { Buffer::new() }).await;
     BUFFER.get().unwrap()
 }
+
+#[instrument(skip(tx), name = "Serenity Loop")]
 async fn serenity_loop(tx: tokio::sync::mpsc::Sender<String>, character_id: u64) {
+    info!("Starting Serenity Loop");
     tokio::spawn(async move {
         loop {
             trace!("Starting Battle Loop");
@@ -52,7 +55,6 @@ async fn serenity_loop(tx: tokio::sync::mpsc::Sender<String>, character_id: u64)
             if results.result.is_empty() {
                 continue;
             }
-
             let mut battle_info = String::from("```\n");
             battle_info.push_str("Battle Results:\n");
             for battle in results.result.iter() {
@@ -79,7 +81,7 @@ async fn serenity_loop(tx: tokio::sync::mpsc::Sender<String>, character_id: u64)
 async fn sync_db() {
     let instant = tokio::time::Instant::now();
     get_game().await.synchronize_db().await;
-    info!("Database Synchronized in {:?}", instant.elapsed());
+    span!(Level::TRACE, "Database", elapsed=?instant.elapsed());
 }
 
 #[async_trait]

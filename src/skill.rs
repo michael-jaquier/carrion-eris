@@ -23,6 +23,8 @@ use strum::IntoEnumIterator;
     ErisValidEnum,
     ErisDisplayEmoji,
     Copy,
+    Eq,
+    Hash,
 )]
 pub enum Skill {
     #[element("Dark")]

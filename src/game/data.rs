@@ -6,23 +6,25 @@ use crate::character::Character;
 use crate::enemy::Mob;
 use crate::game::character_data::CharacterData;
 use crate::game::mutations::Mutations;
-use crate::game_loop::get_buffer;
 use crate::BattleInfo;
 use dashmap::DashMap;
 use rand::random;
 
 use tracing::{info, trace, warn};
 
+use super::buffer::Buffer;
+
 pub struct GameData {
     pub characters: DashMap<u64, CharacterData>,
     producer: Box<dyn Producer + Sync + Send>,
     consumer: Box<dyn Consumer + Sync + Send>,
     database: Database,
+    buffer: Buffer,
 }
 
 impl Default for GameData {
     fn default() -> Self {
-        Self::new()
+        Self::new(Database::Mock)
     }
 }
 
@@ -32,21 +34,25 @@ impl GameData {
 
         let game_data = DashMap::new();
         for c in characters {
-            let character_data = CharacterData::init(&c, Database::Surreal).await;
+            let character_data = CharacterData::init(&c, self.database).await;
             game_data.insert(c.user_id, character_data);
         }
         self.characters = game_data.clone();
         self.activate_enemies();
     }
 
-    pub fn new() -> Self {
-        let database = Database::Surreal;
+    pub fn new(database: Database) -> Self {
         Self {
             characters: DashMap::new(),
             producer: database.get_producer(),
             consumer: database.get_consumer(),
             database,
+            buffer: Buffer::new(),
         }
+    }
+
+    pub(crate) fn get_buffer(&self) -> &Buffer {
+        &self.buffer
     }
 
     pub fn get_character(&self, user_id: u64) -> Option<Character> {
@@ -78,31 +84,30 @@ impl GameData {
 
     pub async fn battle(&self, character: u64) -> BattleResult {
         let mut battles = BattleResult::default();
+        if let Some(c) = self.characters.get(&character) {
+            let enemy = c.active_enemy.as_ref().unwrap();
+            let mut battle_info = BattleInfo::begin(&c.character, enemy);
+            while !battle_info.enemy_killed && !battle_info.player_killed {
+                c.character.player_attack(enemy, &mut battle_info);
 
-        let c = self.characters.get(&character).unwrap();
-        let enemy = c.active_enemy.as_ref().unwrap();
-        let mut battle_info = BattleInfo::begin(&c.character, enemy);
-        while !battle_info.enemy_killed && !battle_info.player_killed {
-            c.character.player_attack(enemy, &mut battle_info);
-
-            if !battle_info.enemy_killed {
-                c.character.enemy_attack(enemy, &mut battle_info);
+                if !battle_info.enemy_killed {
+                    c.character.enemy_attack(enemy, &mut battle_info);
+                }
             }
+            self.apply_battle_info(&battle_info, c.user_id).await;
+            battles.append_result(battle_info);
         }
-
-        GameData::apply_battle_info(&battle_info, c.user_id).await;
-        battles.append_result(battle_info);
 
         battles
     }
 
-    pub async fn apply_battle_info(battle_info: &BattleInfo, character_id: u64) {
+    pub async fn apply_battle_info(&self, battle_info: &BattleInfo, character_id: u64) {
         let mutations = vec![
             Mutations::UpdatePlayer(character_id, battle_info.clone()),
             Mutations::UpdateEnemies(character_id, battle_info.clone()),
             Mutations::NewItems(character_id, battle_info.into()),
         ];
-        get_buffer().await.extend(mutations);
+        self.buffer.extend(mutations);
     }
 
     pub async fn apply_global_mutations(&self, buffer: Vec<Mutations>) {
@@ -157,15 +162,15 @@ impl GameData {
     pub async fn apply_mutations(&self, character: u64) {
         trace!("Applying Mutations");
 
-        if let Some(buffer) = get_buffer().await.get(&character) {
-            for mutation in buffer.clone().iter() {
+        if let Some(buffer) = self.buffer.get(&character) {
+            for mutation in buffer.iter() {
                 if let Some(mut c) = self.characters.get_mut(mutation.user_id()) {
                     c.apply_mutation(mutation.clone()).await;
                 }
             }
         }
 
-        if let Some(buffer) = get_buffer().await.get(&character) {
+        if let Some(buffer) = self.buffer.get(&character) {
             self.apply_global_mutations(buffer.clone()).await;
         }
     }

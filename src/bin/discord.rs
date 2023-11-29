@@ -22,13 +22,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Filter: {:?}", filter);
 
     // For me this is <> file:///Users/michael.jaquier/carrion-eris/ce.db
-    let db = env::var("DATABASE_URL").expect("Expected a database url in the environment");
-    SurrealDB::connect(&db).await?;
     tracing_subscriber::registry()
         .with(filter)
         .with(tracing_subscriber::fmt::layer().compact())
         .init();
 
+    let db = env::var("DATABASE_URL").expect("Expected a database url in the environment");
+    SurrealDB::connect(&db).await?;
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
     let intents =
         serenity::GatewayIntents::non_privileged() | serenity::GatewayIntents::MESSAGE_CONTENT;

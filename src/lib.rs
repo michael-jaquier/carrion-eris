@@ -15,6 +15,7 @@ pub mod item;
 pub mod skill;
 pub mod r#trait;
 pub mod unit;
+pub mod ui;
 
 // Custom user data passed to all command functions
 #[derive(Debug)]

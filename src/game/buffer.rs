@@ -2,7 +2,7 @@ use dashmap::DashMap;
 use tracing::error;
 
 use crate::game::mutations::Mutations;
-use crate::game_loop::{get_buffer, get_game};
+
 
 type MutationVector = Vec<Mutations>;
 
@@ -89,10 +89,5 @@ impl Buffer {
     pub fn get(&self, key: &u64) -> Option<dashmap::mapref::one::Ref<'_, u64, Vec<Mutations>>> {
         self.mutations.get(key)
     }
-    pub async fn mutations(character: u64) {
-        {
-            get_game().await.apply_mutations(character).await;
-            get_buffer().await.clear(character);
-        }
-    }
+  
 }

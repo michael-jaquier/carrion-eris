@@ -29,3 +29,4 @@ impl Display for BattleResult {
         write!(f, "{}", string)
     }
 }
+

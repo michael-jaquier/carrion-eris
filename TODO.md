@@ -34,8 +34,6 @@
 
 # Mobs
 
-* More mob variety
-
 # Combat
 
 * Add healing "attacks" to players would need to allow players to choose multiple attacks to cycle through
@@ -46,3 +44,4 @@
 # Misc
 
 * Tests for scaling of things like exp needed/gain ; player damage scaling / enemy health scaling etc
+* Ability to select a different "Client" on the server side to allow for a different clients <Discord, Web, Whatever>

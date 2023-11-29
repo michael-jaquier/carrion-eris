@@ -1,3 +1,4 @@
+pub mod mock;
 pub mod surreal;
 
 use serenity::async_trait;
@@ -45,18 +46,21 @@ pub trait Consumer {
 #[derive(Debug, Clone, Copy)]
 pub enum Database {
     Surreal,
+    Mock,
 }
 
 impl Database {
     pub fn get_producer(&self) -> Box<dyn Producer + Sync + Send> {
         match self {
             Database::Surreal => Box::new(surreal::producer::SurrealProducer {}),
+            Database::Mock => Box::new(mock::producer::MockProducer {}),
         }
     }
 
     pub fn get_consumer(&self) -> Box<dyn Consumer + Sync + Send> {
         match self {
             Database::Surreal => Box::new(surreal::consumer::SurrealConsumer {}),
+            Database::Mock => Box::new(mock::consumer::MockConsumer {}),
         }
     }
 }

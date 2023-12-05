@@ -264,7 +264,7 @@ impl TraitMutations {
 }
 
 #[derive(
-    Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash, ErisValidEnum, ErisDisplayEmoji,
+    Hash, Eq, Debug, Clone, PartialEq, Serialize, Deserialize, Copy, ErisValidEnum, ErisDisplayEmoji,
 )]
 pub enum CharacterTraits {
     Robust,

@@ -2,7 +2,9 @@
 //!
 //! cargo run --example event-poll-read
 
-use carrion_eris::game_loop::battle_info;
+use carrion_eris::game::gamesync::{GameState, GameStates, GameSync};
+use carrion_eris::{class::Classes, game_loop::battle_info};
+use carrion_eris::{game, ValidEnum};
 use crossterm::{
     cursor::MoveTo,
     event::{poll, read, Event, KeyCode},
@@ -13,11 +15,13 @@ use crossterm::{
     terminal::{self, Clear},
     QueueableCommand,
 };
+use std::process::exit;
 use std::{
     io::{self, Write},
     thread,
     time::Duration,
 };
+use tracing::error;
 
 const HELP: &str = r#"Blocking poll() & non-blocking read()
  - Keyboard, mouse and terminal resize events enabled
@@ -161,6 +165,23 @@ macro_rules! chat_msg {
     }
 }
 
+macro_rules! game_msg_helper {
+    ($chat:expr, $($arg:literal)*) => {
+        $(
+            for line in $arg.split('\n') {
+                chat_msg!($chat, "{}", line);
+            }
+        )*
+    };
+}
+
+macro_rules! game_msg {
+    ($chat:expr, $arg:expr) => {
+        for line in format!("{}", $arg).split('\n') {
+            chat_msg!($chat, "{}", line);
+        }
+    };
+}
 struct RawMode;
 
 impl RawMode {
@@ -177,8 +198,6 @@ impl Drop for RawMode {
     }
 }
 
-
-
 fn main() -> io::Result<()> {
     let mut client = Client::default();
     let mut stdout = io::stdout();
@@ -192,6 +211,16 @@ fn main() -> io::Result<()> {
         .build()
         .unwrap();
 
+    let first_msg = format!("Choose a class");
+    let binding = Classes::valid();
+    let valid_classes = binding.split('\n').collect::<Vec<_>>();
+
+    chat_msg!(&mut client.messages, "{}", first_msg);
+    for x in valid_classes.iter() {
+        chat_msg!(&mut client.messages, "\t{}", x);
+    }
+    let mut game_state: GameState = GameState::new();
+    let mut previous_prompt = String::new();
     while !client.quit {
         while poll(Duration::ZERO)? {
             match read()? {
@@ -209,9 +238,11 @@ fn main() -> io::Result<()> {
                         {
                             let prompt = prompt.buffer.iter().collect::<String>();
                             chat_msg!(&mut client.messages, "{text}", text = &prompt);
+                            previous_prompt = prompt;
                         }
                         prompt.clear();
                     }
+
                     KeyCode::Left => {
                         prompt.left_word();
                     }
@@ -252,9 +283,6 @@ fn main() -> io::Result<()> {
         stdout.queue(Clear(terminal::ClearType::All))?;
         stdout.queue(MoveTo(0, 0))?;
         status_bar(&mut stdout, "4at", 0, 0, w.into())?;
-
-        let first_msg = "Create a class: ";
-        client.messages.push(first_msg.to_string(), Color::White);
 
         client.messages.render(
             &mut stdout,

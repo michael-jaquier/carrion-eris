@@ -1,14 +1,12 @@
-
-
 use crate::{
     character::Character,
     database::{mock::MockDatabase, Consumer},
     enemy::{Enemy, Mob},
     item::Items,
-    skill::SkillSet, CarrionResult,
+    skill::SkillSet,
+    CarrionResult,
 };
 use async_trait::async_trait;
-
 
 use tracing::{instrument, Level};
 

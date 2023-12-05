@@ -94,14 +94,14 @@ impl GameData {
                     c.character.enemy_attack(enemy, &mut battle_info);
                 }
             }
-            self.apply_battle_info(&battle_info, c.user_id).await;
+            self.apply_battle_info(&battle_info, c.user_id);
             battles.append_result(battle_info);
         }
 
         battles
     }
 
-    pub async fn apply_battle_info(&self, battle_info: &BattleInfo, character_id: u64) {
+    pub fn apply_battle_info(&self, battle_info: &BattleInfo, character_id: u64) {
         let mutations = vec![
             Mutations::UpdatePlayer(character_id, battle_info.clone()),
             Mutations::UpdateEnemies(character_id, battle_info.clone()),

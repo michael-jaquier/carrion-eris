@@ -9,13 +9,13 @@ pub mod database;
 pub mod character;
 pub mod damage;
 pub mod enemy;
-mod game;
+pub mod game;
 pub mod game_loop;
 pub mod item;
 pub mod skill;
 pub mod r#trait;
-pub mod unit;
 pub mod ui;
+pub mod unit;
 
 // Custom user data passed to all command functions
 #[derive(Debug)]
@@ -335,7 +335,7 @@ pub fn resistance_scaling(n: i32) -> f64 {
     100.0 - (100.0 * E.powf(-(n as f64 / 9.0).ln() / 3.0))
 }
 
-trait ValidEnum {
+pub trait ValidEnum {
     fn valid() -> String;
 }
 

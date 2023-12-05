@@ -14,6 +14,7 @@ use crate::character::Character;
 use crate::class::Classes;
 use crate::database::Database;
 use crate::enemy::Mob;
+
 use crate::game::buffer::Buffer;
 use crate::game::data::GameData;
 use crate::game::mutations::Mutations;

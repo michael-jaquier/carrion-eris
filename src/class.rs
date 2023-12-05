@@ -14,6 +14,8 @@ use serde::{Deserialize, Serialize};
     ErisValidEnum,
     ErisDisplayEmoji,
     AttributeScaling,
+    Hash,
+    Eq,
 )]
 pub enum Classes {
     #[stat("strength")]

@@ -145,7 +145,7 @@ mod test {
     #[test]
     fn test_mock_database() {
         use crate::database::mock::MockDatabase;
-        MockDatabase::init();
+        MockDatabase::new();
         let db = MockDatabase::get();
         assert_eq!(db.characters.len(), 0);
         assert_eq!(db.enemy.len(), 0);
@@ -157,7 +157,7 @@ mod test {
     #[test]
     fn mock_database_serialize() {
         use crate::database::mock::MockDatabase;
-        MockDatabase::init();
+        MockDatabase::new();
         MockDatabase::get().characters.insert(1, Default::default());
         MockDatabase::get().enemy.insert(1, Default::default());
         MockDatabase::get()

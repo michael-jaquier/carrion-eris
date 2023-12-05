@@ -8,7 +8,9 @@ use crate::class::Classes;
 use crate::damage::{DamageType, Defense};
 use crate::r#trait::{CharacterTraits, TraitMutations};
 use crate::unit::Attributes;
+use std::collections::hash_map::DefaultHasher;
 use std::collections::HashSet;
+use std::hash::{Hash, Hasher};
 
 use std::fmt::Display;
 
@@ -17,7 +19,7 @@ use crate::item::Equipment;
 use crate::skill::SkillSet;
 use tracing::log::debug;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
 pub struct Character {
     pub(crate) level: u32,
     pub(crate) name: String,
@@ -31,6 +33,18 @@ pub struct Character {
     pub(crate) available_traits: u32,
     pub(crate) current_skill: SkillSet,
     pub(crate) equipment: Equipment,
+}
+impl Hash for Character {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.user_id.hash(state);
+        self.name.hash(state);
+        self.class.hash(state);
+        self.equipment.hash(state);
+        self.attributes.hash(state);
+        self.available_traits.hash(state);
+        self.current_skill.hash(state);
+        self.experience.hash(state);
+    }
 }
 
 impl Default for Character {
@@ -234,6 +248,25 @@ impl Character {
         }
         battle_info.enemy_action = action.to_string();
         battle_info.monster_name = enemy.kind.to_string();
+    }
+
+    pub(crate) fn apply_battle_info(&mut self, battle_info: &BattleInfo) {
+        self.hp -= battle_info.enemy_damage;
+        self.hp += battle_info.player_healing;
+
+        // Heal after battle
+        if self.hp <= 0 {
+            self.hp = self.max_hp as i32;
+            return;
+        } else {
+            self.hp += (self.max_hp / 4) as i32;
+            self.hp = self.hp.min(self.max_hp as i32);
+        }
+
+        self.experience += battle_info.experience_gained;
+        self.try_level_up();
+        self.try_trait_gain();
+        println!("Battle Info: {:?}", battle_info);
     }
 }
 

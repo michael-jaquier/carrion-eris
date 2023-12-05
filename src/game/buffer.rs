@@ -3,7 +3,6 @@ use tracing::error;
 
 use crate::game::mutations::Mutations;
 
-
 type MutationVector = Vec<Mutations>;
 
 #[derive(Debug, Clone, Default)]
@@ -89,5 +88,4 @@ impl Buffer {
     pub fn get(&self, key: &u64) -> Option<dashmap::mapref::one::Ref<'_, u64, Vec<Mutations>>> {
         self.mutations.get(key)
     }
-  
 }

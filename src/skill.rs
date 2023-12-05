@@ -564,7 +564,7 @@ impl From<Skill> for SkillSet {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Hash, Eq)]
 pub struct SkillSet {
     pub(crate) skill: Skill,
     pub(crate) experience: u64,

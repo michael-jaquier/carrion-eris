@@ -161,6 +161,12 @@ pub enum Skill {
     EtherealCrush,
 }
 
+impl Default for Skill {
+    fn default() -> Self {
+        Self::AbsorbLife
+    }
+}
+
 impl Skill {
     fn funky_scaling(&self, damage: &mut Damage, _player: &Character) {
         match self {

@@ -63,7 +63,7 @@ pub struct MobQueue {
     pub(crate) mobs: Vec<Mob>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct BattleInfo {
     pub action: Skill,
     pub enemy_action: String,

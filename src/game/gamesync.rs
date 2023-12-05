@@ -120,11 +120,12 @@ impl Stateful<GameState, Context, Event> for Battle {
         debug!("Battle state received event: {:?}", event);
         match event {
             Event::Attack => {
-                let mut battle_info = context.battle_take().unwrap();
-                let enemy = context.get_enemy().unwrap();
-                let character = context.get_character().unwrap();
-                character.player_attack(&enemy, &mut battle_info);
-                context.set_battle(battle_info);
+                let mut battle_info = context.battle_mut();
+                context
+                    .character_ref()
+                    .as_ref()
+                    .unwrap()
+                    .player_attack(&context.enemy_ref().as_ref().unwrap(), &mut battle_info);
                 Response::Transition(GameState::Waiting)
             }
             _ => Response::Ignore,
@@ -132,13 +133,11 @@ impl Stateful<GameState, Context, Event> for Battle {
     }
 
     fn on_exit(&mut self, context: &mut Context) {
-        let binding = context.get_battle().as_ref().unwrap().clone();
-
         context
             .character_mut()
             .as_mut()
             .unwrap()
-            .apply_battle_info(&binding);
+            .apply_battle_info(&context.get_battle());
 
         debug!("Exiting Battle state");
     }
@@ -158,7 +157,7 @@ pub enum Event {
 pub struct Context {
     pub character: RefCell<Option<Character>>,
     pub enemy: RefCell<Option<Enemy>>,
-    pub battle: RefCell<Option<BattleInfo>>,
+    pub battle: RefCell<BattleInfo>,
 }
 
 impl Context {
@@ -166,34 +165,34 @@ impl Context {
         Self {
             character: RefCell::new(None),
             enemy: RefCell::new(None),
-            battle: RefCell::new(None),
+            battle: RefCell::new(Default::default()),
         }
     }
-    pub fn set_character(&mut self, character: Character) {
+    pub fn set_character(&self, character: Character) {
         self.character.swap(&RefCell::new(Some(character)));
     }
-    pub fn set_enemy(&mut self, enemy: Enemy) {
+    pub fn set_enemy(&self, enemy: Enemy) {
         self.enemy.swap(&RefCell::new(Some(enemy)));
     }
-    pub fn set_battle(&mut self, battle: BattleInfo) {
-        self.battle.swap(&RefCell::new(Some(battle)));
+    pub fn set_battle(&self, battle: BattleInfo) {
+        self.battle.swap(&RefCell::new(battle));
     }
 
-    pub fn battle_init(&mut self) {
+    pub fn battle_init(&self) {
         let battle_info = BattleInfo::begin(
             self.character_ref().as_ref().unwrap(),
             self.enemy_ref().as_ref().unwrap(),
         );
         self.set_battle(battle_info);
     }
-    pub fn get_battle(&self) -> std::cell::Ref<'_, Option<BattleInfo>> {
+    pub fn get_battle(&self) -> std::cell::Ref<'_, BattleInfo> {
         self.battle.borrow()
     }
 
-    pub fn battle_mut(&mut self) -> std::cell::RefMut<'_, Option<BattleInfo>> {
+    pub fn battle_mut(&self) -> std::cell::RefMut<'_, BattleInfo> {
         self.battle.borrow_mut()
     }
-    pub fn battle_take(&mut self) -> Option<BattleInfo> {
+    pub fn battle_take(&self) -> BattleInfo {
         self.battle.take()
     }
     pub fn enemy_ref(&self) -> std::cell::Ref<'_, Option<Enemy>> {
@@ -202,7 +201,7 @@ impl Context {
     pub fn character_ref(&self) -> std::cell::Ref<'_, Option<Character>> {
         self.character.borrow()
     }
-    pub fn character_mut(&mut self) -> std::cell::RefMut<'_, Option<Character>> {
+    pub fn character_mut(&self) -> std::cell::RefMut<'_, Option<Character>> {
         self.character.borrow_mut()
     }
     pub fn get_enemy(&self) -> Result<Enemy, PublicGameError> {

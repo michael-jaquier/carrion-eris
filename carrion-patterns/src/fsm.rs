@@ -86,6 +86,10 @@ where
         self.current_state.as_ref()
     }
 
+    pub fn get_state(&self) -> S {
+        self.current_state.as_ref().unwrap().clone()
+    }
+
     pub fn current_context(&mut self) -> &CTX {
         &self.context
     }
@@ -153,9 +157,7 @@ where
 
         match state.on_event(event, &mut self.context) {
             Response::Transition(s) => {
-                if s != *current_state {
-                    return self.transition(s);
-                }
+                return self.transition(s);
             }
             Response::Ignore => {}
         };

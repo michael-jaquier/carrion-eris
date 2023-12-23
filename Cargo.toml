@@ -49,6 +49,7 @@ crossterm = { version = "0.27.0", features = ["event-stream"] }
 futures = "0.3.29"
 futures-timer = "3.0.2"
 anyhow = "1.0.75"
+carrion-patterns = { path = "carrion-patterns" } 
 
 [[bin]]
 name = "discord"

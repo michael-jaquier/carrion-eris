@@ -8,7 +8,7 @@ use crate::class::Classes;
 use crate::damage::{DamageType, Defense};
 use crate::r#trait::{CharacterTraits, TraitMutations};
 use crate::unit::Attributes;
-use std::collections::hash_map::DefaultHasher;
+
 use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 
@@ -253,15 +253,6 @@ impl Character {
     pub(crate) fn apply_battle_info(&mut self, battle_info: &BattleInfo) {
         self.hp -= battle_info.enemy_damage;
         self.hp += battle_info.player_healing;
-
-        // Heal after battle
-        if self.hp <= 0 {
-            self.hp = self.max_hp as i32;
-            return;
-        } else {
-            self.hp += (self.max_hp / 4) as i32;
-            self.hp = self.hp.min(self.max_hp as i32);
-        }
 
         self.experience += battle_info.experience_gained;
         self.try_level_up();

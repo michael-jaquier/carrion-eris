@@ -1,31 +1,34 @@
 use crate::{
     character::Character,
-    class::Classes,
     enemy::{Enemy, Mob},
     BattleInfo,
 };
-use std::{
-    cell::{Cell, RefCell},
-    fmt::{self, Debug, Display, Formatter},
-};
+use std::{cell::RefCell, fmt::Debug};
 
 use rand::random;
-use tracing::{debug, instrument};
+use tracing::debug;
 
-use super::fsm::{FsmEnum, GameError, PublicGameError, Response, Stateful};
+use carrion_patterns::fsm::{FsmEnum, GameError, PublicGameError, Response, Stateful};
 
 #[derive(Debug, Clone, PartialEq, Hash, Eq)]
 pub enum GameState {
     Waiting,
     Battle,
     Null,
+    Utility,
 }
 
 pub struct Waiting {}
 pub struct Initiate {}
 pub struct Battle {}
-
+pub struct Utility {}
 pub struct Null {}
+
+impl Utility {
+    pub fn new() -> Self {
+        Self {}
+    }
+}
 
 impl Null {
     pub fn new() -> Self {
@@ -50,8 +53,32 @@ impl Battle {
     }
 }
 
+impl Stateful<GameState, Context, Event> for Utility {
+    fn on_enter(&mut self, _context: &mut Context) -> Response<GameState> {
+        debug!("Entering Utility state");
+        Response::Ignore
+    }
+
+    fn on_event(&mut self, event: &Event, context: &mut Context) -> Response<GameState> {
+        debug!("Utility state received event: {:?}", event);
+        match event {
+            Event::Heal => {
+                let character_mut = &mut context.character_mut();
+                let character = character_mut.as_mut().unwrap();
+                character.hp = character.max_hp as i32;
+                Response::Transition(GameState::Waiting)
+            }
+            _ => Response::Ignore,
+        }
+    }
+
+    fn on_exit(&mut self, _context: &mut Context) {
+        debug!("Exiting Utility state");
+    }
+}
+
 impl Stateful<GameState, Context, Event> for Null {
-    fn on_enter(&mut self, context: &mut Context) -> Response<GameState> {
+    fn on_enter(&mut self, _context: &mut Context) -> Response<GameState> {
         debug!("Entering Null state");
         Response::Ignore
     }
@@ -67,13 +94,13 @@ impl Stateful<GameState, Context, Event> for Null {
         }
     }
 
-    fn on_exit(&mut self, context: &mut Context) {
+    fn on_exit(&mut self, _context: &mut Context) {
         debug!("Exiting Null state");
     }
 }
 
 impl Stateful<GameState, Context, Event> for Waiting {
-    fn on_enter(&mut self, context: &mut Context) -> Response<GameState> {
+    fn on_enter(&mut self, _context: &mut Context) -> Response<GameState> {
         debug!("Entering Waiting state");
         Response::Ignore
     }
@@ -96,7 +123,7 @@ impl Stateful<GameState, Context, Event> for Waiting {
         }
     }
 
-    fn on_exit(&mut self, context: &mut Context) {
+    fn on_exit(&mut self, _context: &mut Context) {
         debug!("Exiting Waiting state");
     }
 }
@@ -105,6 +132,9 @@ impl Stateful<GameState, Context, Event> for Battle {
     fn on_enter(&mut self, context: &mut Context) -> Response<GameState> {
         if !context.character_is_set() {
             return Response::Transition(GameState::Null);
+        }
+        if context.character_ref().as_ref().unwrap().hp <= 0 {
+            return Response::Transition(GameState::Utility);
         }
         if !context.enemy_is_set() {
             return Response::Transition(GameState::Waiting);
@@ -120,13 +150,20 @@ impl Stateful<GameState, Context, Event> for Battle {
         debug!("Battle state received event: {:?}", event);
         match event {
             Event::Attack => {
-                let mut battle_info = context.battle_mut();
-                context
-                    .character_ref()
-                    .as_ref()
-                    .unwrap()
-                    .player_attack(&context.enemy_ref().as_ref().unwrap(), &mut battle_info);
-                Response::Transition(GameState::Waiting)
+                context.character_ref().as_ref().unwrap().player_attack(
+                    &context.enemy_ref().as_ref().unwrap(),
+                    &mut context.battle_mut(),
+                );
+
+                Response::Transition(GameState::Battle)
+            }
+            Event::Defend => {
+                context.character_ref().as_ref().unwrap().enemy_attack(
+                    &context.enemy_ref().as_ref().unwrap(),
+                    &mut context.battle_mut(),
+                );
+
+                Response::Transition(GameState::Battle)
             }
             _ => Response::Ignore,
         }
@@ -138,7 +175,12 @@ impl Stateful<GameState, Context, Event> for Battle {
             .as_mut()
             .unwrap()
             .apply_battle_info(&context.get_battle());
-
+        context
+            .enemy_mut()
+            .as_mut()
+            .unwrap()
+            .apply_battle_info(&context.get_battle());
+        context.take_dead_enemy();
         debug!("Exiting Battle state");
     }
 }
@@ -152,6 +194,7 @@ pub enum Event {
     Attack,
     Defend,
     End,
+    Heal,
 }
 #[derive(Debug)]
 pub struct Context {
@@ -204,6 +247,9 @@ impl Context {
     pub fn character_mut(&self) -> std::cell::RefMut<'_, Option<Character>> {
         self.character.borrow_mut()
     }
+    pub fn enemy_mut(&self) -> std::cell::RefMut<'_, Option<Enemy>> {
+        self.enemy.borrow_mut()
+    }
     pub fn get_enemy(&self) -> Result<Enemy, PublicGameError> {
         let enemy = self.enemy_ref();
         enemy
@@ -226,6 +272,19 @@ impl Context {
     pub fn enemy_is_set(&self) -> bool {
         self.enemy_ref().is_some()
     }
+    pub fn take_dead_enemy(&self) -> Option<Enemy> {
+        let enemy_alive = self
+            .enemy
+            .borrow()
+            .as_ref()
+            .and_then(|e| Some(e.alive()))
+            .unwrap_or(false);
+        if enemy_alive {
+            None
+        } else {
+            self.enemy.take()
+        }
+    }
 }
 
 impl FsmEnum<GameState, Context, Event> for GameState {
@@ -234,16 +293,17 @@ impl FsmEnum<GameState, Context, Event> for GameState {
             GameState::Waiting => Box::new(Waiting::new()),
             GameState::Battle => Box::new(Battle::new()),
             GameState::Null => Box::new(Null::new()),
+            GameState::Utility => Box::new(Utility::new()),
         }
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::game::fsm::StateMachine;
+    use carrion_patterns::fsm::StateMachine;
 
     use super::*;
-    use crate::character::Character;
+    use crate::{character::Character, class::Classes};
     #[test]
     fn initiate_state_machine() {
         let character = Character::new("Test".to_string(), 1, Classes::Paladin);
@@ -256,11 +316,20 @@ mod test {
             Event::Create(character),
             Event::GenereateEnemy,
             Event::Attack,
+            Event::Defend,
+            Event::Defend,
+            Event::Defend,
+            Event::Defend,
+            Event::Defend,
+            Event::Defend,
+            Event::Defend,
+            Event::Defend,
         ];
         for e in events.into_iter() {
             let ee = state_machine.event(&e);
             assert!(ee.is_ok());
             assert!(state_machine.current_context().get_character().is_ok());
+            println!("Current state machine {:?}", state_machine.current_state());
             println!(
                 "{:?}",
                 state_machine

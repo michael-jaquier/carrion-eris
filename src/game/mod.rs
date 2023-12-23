@@ -3,4 +3,4 @@ pub mod character_data;
 pub mod data;
 pub mod gamesync;
 pub mod mutations;
-pub mod fsm;
+pub mod cli_game;

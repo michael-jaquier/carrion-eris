@@ -160,7 +160,7 @@ impl CharacterData {
                 trace!(
                     "Enemy Level: {enemy_level} Player Level: {}",
                     self.character.level
-                );
+                 );
 
                 if battle_info.enemy_killed {
                     if self.enemies.is_empty() {

@@ -6,7 +6,7 @@ use crate::skill::MobAction;
 use crate::unit::Attributes;
 use eris_macro::{ErisDisplayEmoji, ErisMob, ErisValidEnum};
 
-use crate::{enemy_defense_scaling, enemy_exp_scaling, sub_linear_scaling};
+use crate::{enemy_defense_scaling, enemy_exp_scaling, sub_linear_scaling, BattleInfo};
 use rand::prelude::SliceRandom;
 use rand::thread_rng;
 use serde::{Deserialize, Serialize};
@@ -71,6 +71,21 @@ impl Enemy {
 
     pub fn cost(&self) -> u64 {
         self.gold * 3
+    }
+
+    pub(crate) fn apply_battle_info(&mut self, battle_info: &BattleInfo) {
+        self.health -= battle_info.player_damage;
+        if battle_info.enemy_healing > 0 {
+            let max_heal = self.health / 4;
+            let heal = battle_info.enemy_healing.min(max_heal);
+            self.health += heal;
+        }
+
+        self.health = self.health.min(self.max_health() as i32);
+        if self.health <= 0 {
+            self.state = EnemyState::Dead;
+        }
+        
     }
 }
 

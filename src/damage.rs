@@ -55,7 +55,8 @@ impl Defense {
     }
 
     pub fn dodge(&self) -> bool {
-        thread_rng().gen_bool(dodge_scaling(self.dodge).max(85.0) / 100.0)
+        let dodge_probability = dodge_scaling(self.dodge).min(85.0) / 100.0;
+        thread_rng().gen_bool(dodge_probability)
     }
 
     pub fn physical_mitigation(&self) -> f64 {
@@ -115,8 +116,11 @@ impl From<&Enemy> for Defense {
     }
 }
 
-#[cfg(test)]
-mod test {}
+impl From<&mut Enemy> for Defense {
+    fn from(enemy: &mut Enemy) -> Self {
+        Self::new_enemy(enemy)
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash, EnumIter)]
 pub enum ResistCategories {
@@ -151,20 +155,9 @@ impl Distribution<ResistCategories> for Standard {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Copy, Eq, Hash, EnumIter, Default)]
 pub enum DamageType {
-    Fire,
-    Water,
-    Earth,
-    Air,
-    Light,
-    Dark,
-    Iron,
-    Arcane,
-    Holy,
-    NonElemental,
+    Elemental,
     Physical,
-    Hope,
-    Despair,
-    Existential,
+    NonElemental,
     Boss,
     Prismatic,
     Healing,
@@ -193,24 +186,13 @@ impl DamageType {
 
     pub fn resist_category(&self) -> ResistCategories {
         match self {
-            DamageType::Fire => ResistCategories::Elemental,
-            DamageType::Water => ResistCategories::Elemental,
-            DamageType::Earth => ResistCategories::Elemental,
-            DamageType::Air => ResistCategories::Elemental,
-            DamageType::Light => ResistCategories::NonElemental,
-            DamageType::Dark => ResistCategories::NonElemental,
-            DamageType::Iron => ResistCategories::NonElemental,
-            DamageType::Arcane => ResistCategories::NonElemental,
-            DamageType::Holy => ResistCategories::NonElemental,
             DamageType::NonElemental => ResistCategories::NonElemental,
             DamageType::Physical => ResistCategories::Physical,
-            DamageType::Hope => ResistCategories::NonElemental,
-            DamageType::Despair => ResistCategories::NonElemental,
-            DamageType::Existential => ResistCategories::NonElemental,
             DamageType::Boss => ResistCategories::Boss,
             DamageType::Prismatic => ResistCategories::Prismatic,
-            DamageType::Healing => ResistCategories::NonElemental,
             DamageType::Universal => ResistCategories::Universal,
+            DamageType::Elemental => ResistCategories::Elemental,
+            DamageType::Healing => ResistCategories::Universal,
         }
     }
 }
@@ -218,24 +200,12 @@ impl DamageType {
 impl From<&str> for DamageType {
     fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
-            "fire" => DamageType::Fire,
-            "water" => DamageType::Water,
-            "earth" => DamageType::Earth,
-            "air" => DamageType::Air,
-            "light" => DamageType::Light,
-            "dark" => DamageType::Dark,
-            "iron" => DamageType::Iron,
-            "arcane" => DamageType::Arcane,
-            "holy" => DamageType::Holy,
             "nonelemental" => DamageType::NonElemental,
             "physical" => DamageType::Physical,
-            "hope" => DamageType::Hope,
-            "despair" => DamageType::Despair,
-            "existential" => DamageType::Existential,
             "boss" => DamageType::Boss,
             "prismatic" => DamageType::Prismatic,
-            "healing" => DamageType::Healing,
             "universal" => DamageType::Universal,
+            "elemental" => DamageType::Elemental,
             _ => panic!("Invalid Damage Type {s:?}"),
         }
     }
@@ -318,6 +288,47 @@ impl UniqueDamageEffect {
         }
         damage
     }
+
+    fn apply_cli(&self, player: &mut Character, enemy: &mut Enemy, self_damage: &Damage) -> Damage {
+        let mut damage = Damage::zero(self_damage.dtype);
+        use UniqueDamageEffect::*;
+        match self {
+            Poison => {
+                damage.damage += enemy.health / 10;
+            }
+            Bleed => {
+                damage.damage += (enemy.health / 10) * self_damage.number_of_hits as i32;
+            }
+            Burn => {
+                damage.damage += enemy.health / 10;
+            }
+            Shock => {
+                damage.multiplier = 1.5;
+            }
+            Curse => {
+                damage.multiplier = 1.5;
+            }
+            Regenerate => {
+                player.hp += (player.max_hp / 3u32) as i32;
+            }
+            Invigorate => {
+                player.hp += (player.max_hp) as i32;
+            }
+            Enrage => {
+                damage.crit_chance = 0.25;
+                damage.critical_multiplier += 1.5;
+            }
+            Berserk => {
+                damage.number_of_hits += 2;
+                damage.number_of_hits = (self_damage.number_of_hits as f64 * 1.25) as u32;
+            }
+            Vampire => {
+                player.hp += damage.damage() / 4;
+            }
+            Death => enemy.state = crate::enemy::EnemyState::Dead,
+        }
+        damage
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default, Builder)]
@@ -341,15 +352,16 @@ pub struct Damage {
 
 impl Damage {
     pub fn damage(&self) -> i32 {
-        let mut damage = 0;
+        let mut damage: i32 = 0;
 
         for _ in 0..self.number_of_hits {
-            damage += self.damage;
+            damage = damage.saturating_add(self.damage);
             if thread_rng().gen_bool(self.crit_chance) {
-                damage += (damage as f64 * self.critical_multiplier) as i32;
+                damage =
+                    damage.saturating_add((self.damage as f64 * self.critical_multiplier) as i32);
             }
         }
-        damage += (damage as f64 * self.multiplier) as i32;
+        damage = damage.saturating_add((damage as f64 * self.multiplier) as i32);
         damage
     }
 
@@ -362,6 +374,14 @@ impl Damage {
         let mut damage = Damage::zero(self.dtype);
         for effect in self.unique_effect.iter() {
             let mutated_damage = effect.apply(player, enemy, self, battle_info);
+            damage += mutated_damage;
+        }
+        *self += damage;
+    }
+    pub(crate) fn apply_unique_cli(&mut self, arg: &mut Character, enemy: &mut Enemy) {
+        let mut damage = Damage::zero(self.dtype);
+        for effect in self.unique_effect.iter() {
+            let mutated_damage = effect.apply_cli(arg, enemy, self);
             damage += mutated_damage;
         }
         *self += damage;
@@ -386,7 +406,9 @@ impl Damage {
 
 impl AddAssign for Damage {
     fn add_assign(&mut self, rhs: Self) {
-        self.damage += rhs.damage / (self.number_of_hits as i32).max(1);
+        self.damage = self
+            .damage
+            .saturating_add(rhs.damage / (self.number_of_hits as i32).max(1));
         self.multiplier += rhs.multiplier;
         self.critical_multiplier += rhs.critical_multiplier;
         self.crit_chance += rhs.crit_chance;
@@ -406,5 +428,26 @@ impl Add for Damage {
         let mut damage = self;
         damage += rhs;
         damage
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::enemy::Mob;
+
+    use super::*;
+
+    #[test]
+    fn dodge_is_sane_for_enemies() {
+        let mut charater: Character = Default::default();
+        charater.level = 10;
+        let enemy: Mob = Mob::Orc;
+        let enemy: Enemy = enemy.generate(charater.level);
+        let defense: Defense = (&enemy).into();
+        assert!(
+            dodge_scaling(defense.dodge) / 100.0 < 0.06,
+            "{}",
+            dodge_scaling(defense.dodge) / 100.0
+        )
     }
 }

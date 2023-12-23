@@ -1,7 +1,8 @@
 use crate::enemy::Enemy;
-use crate::{level_up_scaling, BattleInfo};
+use crate::{level_up_scaling, AttributeScaling, BattleInfo};
 
 use serde::{Deserialize, Serialize};
+
 use tracing::{info, trace};
 
 use crate::class::Classes;
@@ -14,9 +15,10 @@ use std::hash::{Hash, Hasher};
 
 use std::fmt::Display;
 
-use crate::item::Equipment;
+use crate::item::{Equipment, Items};
+use strum::IntoEnumIterator;
 
-use crate::skill::SkillSet;
+use crate::skill::{Skill, SkillSet};
 use tracing::log::debug;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Eq)]
@@ -33,6 +35,7 @@ pub struct Character {
     pub(crate) available_traits: u32,
     pub(crate) current_skill: SkillSet,
     pub(crate) equipment: Equipment,
+    pub(crate) items: Items,
 }
 impl Hash for Character {
     fn hash<H: Hasher>(&self, state: &mut H) {
@@ -62,6 +65,7 @@ impl Default for Character {
             available_traits: 0,
             current_skill: SkillSet::default(),
             equipment: Default::default(),
+            items: Default::default(),
         }
     }
 }
@@ -71,11 +75,28 @@ impl Character {
         &self.traits
     }
 
+    // Only allow skills whose primary attribute matches the character's class
+    pub(crate) fn skill_list(&self) -> Vec<Skill> {
+        let mut skills = Vec::new();
+        for skill in Skill::iter() {
+            let attribute = AttributeScaling::scaling(&skill).unwrap();
+            let attr = self.attributes.get(&attribute);
+            if attr > 17 {
+                skills.push(skill);
+            }
+        }
+        skills
+    }
     pub(crate) fn insert_trait(&mut self, trait_: CharacterTraits) -> bool {
         info!("Inserting trait: {:?}", trait_);
         trait_.attribute_mutator(&mut self.attributes);
         info!("Attributes after mutation {:?}", self.attributes);
-        self.traits.insert(trait_)
+        if self.traits.insert(trait_) {
+            self.available_traits -= 1;
+            true
+        } else {
+            false
+        }
     }
 
     pub fn mutations(&self) -> TraitMutations {
@@ -93,10 +114,10 @@ impl Character {
     }
     pub fn new(name: String, user_id: u64, class: Classes) -> Self {
         let max_hp = match class {
-            Classes::Warrior => 20,
-            Classes::Wizard => 10,
-            Classes::Sorcerer => 10,
-            Classes::Paladin => 15,
+            Classes::Warrior => 120,
+            Classes::Wizard => 80,
+            Classes::Sorcerer => 80,
+            Classes::Paladin => 175,
         };
 
         let base_skill = SkillSet::new(class.action());
@@ -114,6 +135,7 @@ impl Character {
             available_traits: 0,
             current_skill: base_skill,
             equipment: Default::default(),
+            items: Default::default(),
         }
     }
 
@@ -130,7 +152,7 @@ impl Character {
 
     pub fn try_trait_gain(&mut self) -> bool {
         if self.level % 10 == 0
-            && (self.available_traits + self.traits.len() as u32) < self.level / 10
+            || (self.available_traits + self.traits.len() as u32) < self.level / 10
         {
             self.available_traits += 1;
             return true;
@@ -155,6 +177,49 @@ impl Character {
 
     pub fn rest(&mut self) {
         self.hp = self.max_hp as i32;
+    }
+
+    pub fn cli_player(&mut self, enemy: &mut Enemy) -> i32 {
+        let mut total_damage_done = 0;
+        for _ in 0..self.action_points() {
+            let mut damage = self.current_skill.act(self, enemy);
+            damage.apply_unique_cli(self, enemy);
+            if !enemy.alive() {
+                break;
+            }
+
+            let defense: Defense = enemy.into();
+
+            if defense.dodge() {
+                continue;
+            }
+
+            let mitigation = defense.defense(damage.dtype().resist_category());
+            let damage_taken_pre = damage.damage();
+            let damage_taken =
+                damage_taken_pre - (damage_taken_pre as f64 * mitigation / 100.0) as i32;
+
+            enemy.health -= damage_taken;
+            total_damage_done += damage_taken;
+
+            self.current_skill.experience += (enemy.experience / 10).max(1);
+        }
+
+        self.current_skill.try_level_up();
+
+        if !enemy.alive() {
+            for item in enemy.items.iter() {
+                if let Some(return_item) = self.equipment.auto_equip(item.clone()) {
+                    self.items.push(return_item);
+                }
+            }
+
+            self.items.gold += enemy.gold;
+            self.experience += enemy.experience;
+            self.try_level_up();
+            self.try_trait_gain();
+        }
+        total_damage_done
     }
 
     pub fn player_attack(&self, enemy: &Enemy, battle_info: &mut BattleInfo) {
@@ -217,6 +282,27 @@ impl Character {
         }
     }
 
+    pub fn cli_enemy(&mut self, enemy: &mut Enemy) -> i32 {
+        let (damage, _action) = enemy.action();
+        let defense: Defense = self.into();
+        if damage.dtype() == DamageType::Healing {
+            let heal = damage.damage();
+            enemy.health += heal;
+            enemy.health = enemy.health.min(enemy.max_health() as i32);
+            return 0;
+        }
+
+        if defense.dodge() {
+            return 0;
+        }
+
+        let mitigation = defense.defense(damage.dtype().resist_category());
+        let damage_taken_pre = damage.damage();
+        let damage_taken = damage_taken_pre - (damage_taken_pre as f64 * mitigation / 100.0) as i32;
+        self.hp -= damage_taken;
+        self.hp = self.hp.max(0);
+        damage_taken
+    }
     pub fn enemy_attack(&self, enemy: &Enemy, battle_info: &mut BattleInfo) {
         let (damage, action) = enemy.action();
         let defense: Defense = self.into();
@@ -250,14 +336,15 @@ impl Character {
         battle_info.monster_name = enemy.kind.to_string();
     }
 
-    pub(crate) fn apply_battle_info(&mut self, battle_info: &BattleInfo) {
-        self.hp -= battle_info.enemy_damage;
-        self.hp += battle_info.player_healing;
-
-        self.experience += battle_info.experience_gained;
-        self.try_level_up();
-        self.try_trait_gain();
-        println!("Battle Info: {:?}", battle_info);
+    pub fn display_for_cli(&self) -> Vec<String> {
+        let mut string = Vec::new();
+        string.push(format!("Level: {}", self.level));
+        string.push(format!("Class: {}", self.class));
+        string.extend(self.attributes.display_for_cli());
+        if !self.traits.is_empty() {
+            string.push(format!("Traits: {:?}", self.traits));
+        }
+        string
     }
 }
 

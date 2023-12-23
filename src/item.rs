@@ -861,6 +861,76 @@ impl Equipment {
 
         base
     }
+
+    pub(crate) fn display_for_cli(&self) -> Vec<String> {
+        let s = self.to_string();
+        let mut vec = s.split('\n').map(|x| x.to_string()).collect::<Vec<_>>();
+        vec.remove(0);
+        vec.remove(vec.len() - 1);
+        vec
+    }
+
+    pub(crate) fn get(&self, slot: EquipmentSlot) -> Vec<IndividualItem> {
+        let mut vec = Vec::new();
+        match slot {
+            EquipmentSlot::Helmet => {
+                if let Some(item) = &self.helmet.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::Armor => {
+                if let Some(item) = &self.armor.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::Legs => {
+                if let Some(item) = &self.legs.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::Feet => {
+                if let Some(item) = &self.feet.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::Hands => {
+                if let Some(item) = &self.hands.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::Weapon => {
+                if let Some(item) = &self.weapon.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::Shield => {
+                if let Some(item) = &self.shield.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::Ring => {
+                for ring in &self.ring {
+                    if let Some(item) = &ring.item {
+                        vec.push(item.clone());
+                    }
+                }
+            }
+            EquipmentSlot::Amulet => {
+                if let Some(item) = &self.amulet.item {
+                    vec.push(item.clone());
+                }
+            }
+            EquipmentSlot::WondrousItem => {
+                for wonder in &self.wondrous_item {
+                    if let Some(item) = &wonder.item {
+                        vec.push(item.clone());
+                    }
+                }
+            }
+            EquipmentSlot::Inventory => {}
+        }
+        vec
+    }
 }
 
 impl Default for Equipment {
@@ -1055,6 +1125,41 @@ impl IndividualItem {
             points: 0,
         }
     }
+    pub fn cli_display(&self) -> Vec<String> {
+        let mut string_vec = Vec::new();
+        string_vec.push(format!("Name: {}", self.name));
+        string_vec.push(format!("Description: {}", self.description));
+        if self.armor != 0 {
+            string_vec.push(format!("Armor: {}", self.armor));
+        }
+        if self.dodge != 0 {
+            string_vec.push(format!("Dodge: {}", self.dodge));
+        }
+        if self.action != 0 {
+            string_vec.push(format!("Action: {}", self.action));
+        }
+
+        string_vec.extend(self.attribute_bonus.display_for_cli());
+        let dmg_string = self
+            .damage
+            .iter()
+            .filter(|(_, v)| **v != 0)
+            .map(|(k, v)| format!("{:?}: {}", k, v))
+            .collect::<Vec<String>>()
+            .join(", ");
+        string_vec.push(format!("Damage: {}", dmg_string));
+        let res_string = self
+            .resistance
+            .iter()
+            .filter(|(_, v)| **v != 0)
+            .map(|(k, v)| format!("{:?}: {}", k, v))
+            .collect::<Vec<String>>()
+            .join(", ");
+        string_vec.push(format!("Resistance: {}", res_string));
+
+        string_vec
+    }
+
     pub fn to_file(&self, path: String) {
         fs::write(path, serde_yaml::to_string(self).unwrap()).unwrap();
     }
@@ -1180,7 +1285,7 @@ mod test {
             points: 1,
         };
 
-        item1.damage.insert(DamageType::Fire, 3);
+        item1.damage.insert(DamageType::Elemental, 3);
         let mut item2 = IndividualItem {
             name: "Test Item".to_string(),
             description: "Test Description".to_string(),
@@ -1194,7 +1299,7 @@ mod test {
             action: 1,
             points: 1,
         };
-        item2.damage.insert(DamageType::Fire, 3);
+        item2.damage.insert(DamageType::Elemental, 3);
         let mut item3 = IndividualItem {
             name: "Test Item".to_string(),
             description: "Test Description".to_string(),
@@ -1208,14 +1313,14 @@ mod test {
             action: 1,
             points: 1,
         };
-        item3.damage.insert(DamageType::Fire, 3);
+        item3.damage.insert(DamageType::Elemental, 3);
         item3 += item1;
         item3 += item2;
         assert_eq!(item3.armor, 3);
         assert_eq!(item3.dodge, 3);
         assert_eq!(item3.action, 3);
         assert_eq!(item3.points, 3);
-        assert_eq!(item3.damage.get(&DamageType::Fire).unwrap(), &9);
+        assert_eq!(item3.damage.get(&DamageType::Elemental).unwrap(), &9);
     }
 
     #[test]

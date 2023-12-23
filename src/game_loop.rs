@@ -163,9 +163,7 @@ pub async fn battle_info(character_id: u64) -> BattleResult {
             .await
             .add(Mutations::Create(Box::new(new_character)));
     }
-    let results = get_game().await.battle(character_id).await;
-
-    results
+    get_game().await.battle(character_id).await
 }
 
 pub struct SynchroBattle {

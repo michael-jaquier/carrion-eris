@@ -5,7 +5,7 @@ armor: null
 resistance:
   NonElemental: 10
 damage:
-  Despair: 100
+  NonElemental: 100
 action: 0
 rarity: Legendary
 attribute: null

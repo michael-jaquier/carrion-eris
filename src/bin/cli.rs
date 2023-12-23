@@ -1,20 +1,9 @@
-//! Demonstrates how to match on modifiers like: Control, alt, shift.
-//!
-//! cargo run --example event-poll-read
-
-use carrion_eris::class::Classes;
-use carrion_eris::game::gamesync::Event as GameEvent;
-use carrion_eris::game::gamesync::{Context, GameState};
-use carrion_eris::ui::cli::{status_bar, GameClient, Prompt, RawMode, Rect};
-use carrion_eris::ValidEnum;
-use carrion_patterns::fsm::StateMachine;
-use crossterm::{
-    cursor::MoveTo,
-    event::{poll, read, Event, KeyCode},
-    style::{Color, Print},
-    terminal::{self, Clear},
-    QueueableCommand,
+use carrion_eris::{
+    game::cli::game_loop::GameStates,
+    ui::cli::{GameClient, RawMode, TICK_RATE},
 };
+
+use crossterm::event::{poll, read, Event, KeyCode};
 
 use std::{
     io::{self, Write},
@@ -22,120 +11,76 @@ use std::{
     time::Duration,
 };
 
-macro_rules! chat_msg {
-    ($chat:expr, $($arg:tt)*) => {
-        $chat.push(format!($($arg)*), Color::White)
-    }
-}
-
-macro_rules! game_msg_helper {
-    ($chat:expr, $($arg:literal)*) => {
-        $(
-            for line in $arg.split('\n') {
-                chat_msg!($chat, "{}", line);
-            }
-        )*
-    };
-}
-
-macro_rules! game_msg {
-    ($chat:expr, $arg:expr) => {
-        for line in format!("{}", $arg).split('\n') {
-            chat_msg!($chat, "{}", line);
-        }
-    };
-}
-
 fn main() -> io::Result<()> {
-    let mut client = GameClient::default();
+    let mut client = GameClient::new();
     let mut stdout = io::stdout();
     let _raw_mode = RawMode::enable()?;
-    let mut prompt = Prompt::default();
-    let (mut w, mut h) = terminal::size()?;
 
+    let mut game = GameStates::new();
     while !client.quit {
         while poll(Duration::ZERO)? {
             match read()? {
-                Event::Resize(nw, nh) => {
-                    w = nw;
-                    h = nh;
+                Event::Resize(w, h) => {
+                    client.resize(w, h);
                 }
                 Event::FocusGained => {}
                 Event::FocusLost => {}
                 Event::Key(event) => match event.code {
                     KeyCode::Backspace => {
-                        prompt.backspace();
+                        client.prompt.backspace();
                     }
                     KeyCode::Enter => {
                         {
-                            let _prompt = prompt.buffer.iter().collect::<String>();
+                            let command = client.prompt.buffer.iter().collect::<String>();
+                            game.command(command, &mut client)
                         }
-                        prompt.clear();
+                        client.prompt.clear();
                     }
 
                     KeyCode::Left => {
-                        prompt.left_word();
+                        client.prompt.left_word();
                     }
                     KeyCode::Right => {
-                        prompt.right_word();
+                        client.prompt.right_word();
                     }
-                    KeyCode::Up => todo!(),
-                    KeyCode::Down => todo!(),
-                    KeyCode::Home => todo!(),
-                    KeyCode::End => todo!(),
-                    KeyCode::PageUp => todo!(),
-                    KeyCode::PageDown => todo!(),
-                    KeyCode::Tab => todo!(),
-                    KeyCode::BackTab => todo!(),
-                    KeyCode::Delete => todo!(),
-                    KeyCode::Insert => todo!(),
-                    KeyCode::F(_) => todo!(),
+                    KeyCode::Up => {}
+                    KeyCode::Down => {}
+                    KeyCode::Home => {}
+                    KeyCode::End => {}
+                    KeyCode::PageUp => {}
+                    KeyCode::PageDown => {}
+                    KeyCode::Tab => {
+                        client.quit = true;
+                    }
+                    KeyCode::BackTab => {}
+                    KeyCode::Delete => {}
+                    KeyCode::Insert => {}
+                    KeyCode::F(_) => {}
                     KeyCode::Char(c) => {
-                        prompt.insert(c);
+                        client.prompt.insert(c);
                     }
-                    KeyCode::Null => todo!(),
-                    KeyCode::Esc => todo!(),
-                    KeyCode::CapsLock => todo!(),
-                    KeyCode::ScrollLock => todo!(),
-                    KeyCode::NumLock => todo!(),
-                    KeyCode::PrintScreen => todo!(),
-                    KeyCode::Pause => todo!(),
-                    KeyCode::Menu => todo!(),
-                    KeyCode::KeypadBegin => todo!(),
-                    KeyCode::Media(_) => todo!(),
-                    KeyCode::Modifier(_) => todo!(),
+                    KeyCode::Null => {}
+                    KeyCode::Esc => {}
+                    KeyCode::CapsLock => {}
+                    KeyCode::ScrollLock => {}
+                    KeyCode::NumLock => {}
+                    KeyCode::PrintScreen => {}
+                    KeyCode::Pause => {}
+                    KeyCode::Menu => {}
+                    KeyCode::KeypadBegin => {}
+                    KeyCode::Media(_) => {}
+                    KeyCode::Modifier(_) => {}
                 },
                 Event::Mouse(_) => {}
                 Event::Paste(_) => {}
             }
         }
 
-        stdout.queue(Clear(terminal::ClearType::All))?;
-        stdout.queue(MoveTo(0, 0))?;
-        status_bar(&mut stdout, "4at", 0, 0, w.into())?;
-
-        client.messages.render(
-            &mut stdout,
-            Rect {
-                x: 0,
-                y: 1,
-                w: w as usize,
-                h: h as usize - 3,
-            },
-        )?;
-        status_bar(&mut stdout, "Status: Online", 0, h as usize - 2, w.into())?;
-        stdout.queue(MoveTo(0, h as u16 - 1))?;
-        for x in prompt
-            .buffer
-            .get(0..(w - 2) as usize)
-            .unwrap_or(&prompt.buffer)
-        {
-            stdout.queue(Print(x))?;
-        }
-        stdout.queue(MoveTo(prompt.cursor as u16, h - 1))?;
+        game.update(&mut client);
+        client.render_prompt()?;
         stdout.flush()?;
 
-        thread::sleep(Duration::from_millis(33));
+        thread::sleep(Duration::from_millis(TICK_RATE));
     }
     Ok(())
 }

@@ -74,32 +74,32 @@ impl Serialize for MockDatabase {
         let character_entries: Vec<(u64, Character)> = self
             .characters
             .iter()
-            .map(|e| (e.key().clone(), e.value().clone()))
+            .map(|e| (*e.key(), e.value().clone()))
             .collect();
         let enemy_entries: Vec<(u64, Enemy)> = self
             .enemy
             .iter()
-            .map(|e| (e.key().clone(), e.value().clone()))
+            .map(|e| (*e.key(), e.value().clone()))
             .collect();
         let mob_entries: Vec<(u64, Vec<Mob>)> = self
             .mobs
             .iter()
-            .map(|e| (e.key().clone(), e.value().clone()))
+            .map(|e| (*e.key(), e.value().clone()))
             .collect();
         let skill_entries: Vec<((u64, u64), SkillSet)> = self
             .skills
             .iter()
-            .map(|e| (e.key().clone(), e.value().clone()))
+            .map(|e| (*e.key(), e.value().clone()))
             .collect();
         let item_entries: Vec<(u64, Items)> = self
             .items
             .iter()
-            .map(|e| (e.key().clone(), e.value().clone()))
+            .map(|e| (*e.key(), e.value().clone()))
             .collect();
         let current_skill_entries: Vec<(u64, SkillSet)> = self
             .current_skill
             .iter()
-            .map(|e| (e.key().clone(), e.value().clone()))
+            .map(|e| (*e.key(), e.value().clone()))
             .collect();
 
         state.serialize_field("characters", &character_entries)?;
@@ -119,10 +119,7 @@ impl MockDatabase {
     }
 
     pub fn get() -> &'static MockDatabase {
-        MOCK_DB.get_or_init(|| {
-            let db = Self::load_db().unwrap_or_default();
-            db
-        })
+        MOCK_DB.get_or_init(|| Self::load_db().unwrap_or_default())
     }
 
     pub fn store_db() -> Result<(), Box<dyn std::error::Error>> {

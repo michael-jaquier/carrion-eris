@@ -25,37 +25,38 @@ use strum::IntoEnumIterator;
     Copy,
     Eq,
     Hash,
+    strum::EnumIter,
 )]
 pub enum Skill {
-    #[element("Dark")]
+    #[element("NonElemental")]
     #[stat("intelligence")]
     #[emoji("👻")]
     AbsorbLife,
-    #[element("air")]
+    #[element("Elemental")]
     #[stat("intelligence")]
     #[emoji("🌪️")]
     Tornado,
-    #[element("arcane")]
+    #[element("NonElemental")]
     #[stat("intelligence")]
     #[emoji("🔮")]
     MagicMissile,
-    #[element("fire")]
+    #[element("Elemental")]
     #[stat("intelligence")]
     #[emoji("🔥")]
     FireBall,
-    #[element("water")]
+    #[element("Elemental")]
     #[stat("intelligence")]
     #[emoji("💧")]
     WaterBall,
-    #[element("dark")]
+    #[element("NonElemental")]
     #[stat("intelligence")]
     #[emoji("🌑")]
     PoisonFlask,
-    #[element("earth")]
+    #[element("Elemental")]
     #[stat("intelligence")]
     #[emoji("🌿")]
     Earthquake,
-    #[element("hope")]
+    #[element("NonElemental")]
     #[stat("intelligence")]
     #[emoji("🌟")]
     RadiantIntellect,
@@ -63,15 +64,15 @@ pub enum Skill {
     #[element("physical")]
     #[emoji("🗡️")]
     Slash,
-    #[element("earth")]
+    #[element("Elemental")]
     #[stat("constitution")]
     #[emoji("🌎")]
     EarthShatter,
-    #[element("iron")]
+    #[element("Physical")]
     #[stat("strength")]
     #[emoji("🔩")]
     SteelRain,
-    #[element("holy")]
+    #[element("NonElemental")]
     #[stat("charisma")]
     #[emoji("🌟")]
     Rapture,
@@ -79,20 +80,20 @@ pub enum Skill {
     #[stat("dexterity")]
     #[emoji("🗡️")]
     Backstab,
-    #[element("light")]
+    #[element("NonElemental")]
     #[stat("wisdom")]
     #[emoji("☀️")]
     HolySmite,
-    #[element("holy")]
+    #[element("NonElemental")]
     #[stat("wisdom")]
     #[emoji("🙏")]
     DivineBlessing,
     #[stat("charisma")]
-    #[element("existential")]
+    #[element("NonElemental")]
     #[emoji("🗨️")]
     SuicidalPersuasion,
     #[stat("charisma")]
-    #[element("despair")]
+    #[element("NonElemental")]
     #[emoji("💋")]
     Seduction,
     #[stat("charisma")]
@@ -100,11 +101,11 @@ pub enum Skill {
     #[emoji("🌀")]
     Mesmerize,
     #[stat("charisma")]
-    #[element("fire")]
+    #[element("Elemental")]
     #[emoji("🔥")]
     Excoriate,
     #[stat("dexterity")]
-    #[element("arcane")]
+    #[element("NonElemental")]
     #[emoji("🔮")]
     ArcaneNeedle,
     #[stat("dexterity")]
@@ -112,15 +113,15 @@ pub enum Skill {
     #[emoji("🌈")]
     PrismaticFlourish,
     #[stat("dexterity")]
-    #[element("dark")]
+    #[element("NonElemental")]
     #[emoji("🌑")]
     ShadowStrike,
     #[stat("dexterity")]
-    #[element("light")]
+    #[element("NonElemental")]
     #[emoji("☀️")]
     SolarFlareShot,
     #[stat("dexterity")]
-    #[element("fire")]
+    #[element("Elemental")]
     #[emoji("🔥")]
     FireDance,
     #[stat("strength")]
@@ -128,11 +129,11 @@ pub enum Skill {
     #[emoji("🏋️")]
     PowerStrike,
     #[stat("strength")]
-    #[element("earth")]
+    #[element("Elemental")]
     #[emoji("🌋")]
     EarthquakeSlam,
     #[stat("strength")]
-    #[element("iron")]
+    #[element("Physical")]
     #[emoji("⛓️")]
     IronFusillade,
     #[stat("strength")]
@@ -152,10 +153,10 @@ pub enum Skill {
     #[emoji("⚔️")]
     BruteForce,
     #[stat("strength")]
-    #[element("light")]
+    #[element("NonElemental")]
     #[emoji("💥")]
     BlindingFist,
-    #[element("arcane")]
+    #[element("Prismatic")]
     #[stat("strength")]
     #[emoji("✨")]
     EtherealCrush,
@@ -360,24 +361,13 @@ impl Skill {
     fn elemental_scaling(&self) -> i32 {
         if let Some(elemental) = ElementalScaling::scaling(self) {
             let (bottom, top) = match elemental {
-                DamageType::Fire => (0, 10),
-                DamageType::Water => (0, 10),
-                DamageType::Earth => (0, 10),
-                DamageType::Air => (0, 10),
-                DamageType::Light => (0, 10),
-                DamageType::Dark => (0, 10),
-                DamageType::Iron => (0, 10),
-                DamageType::Arcane => (0, 10),
-                DamageType::Holy => (0, 10),
                 DamageType::NonElemental => (0, 10),
                 DamageType::Physical => (0, 10),
-                DamageType::Hope => (0, 10),
-                DamageType::Despair => (0, 10),
-                DamageType::Existential => (0, 10),
                 DamageType::Boss => (0, 10),
                 DamageType::Prismatic => (0, 10),
                 DamageType::Healing => (0, 100),
                 DamageType::Universal => (0, 10),
+                DamageType::Elemental => (0, 10),
             };
             return thread_rng().gen_range(bottom..top);
         }
@@ -412,12 +402,12 @@ pub enum MobAction {
     #[emoji("🔪")]
     Stab,
 
-    #[element("fire")]
+    #[element("elemental")]
     #[stat("intelligence")]
     #[emoji("🔥")]
     FireBall,
 
-    #[element("holy")]
+    #[element("nonElemental")]
     #[stat("wisdom")]
     #[emoji("🌟")]
     SlimeAbsorb,
@@ -432,17 +422,17 @@ pub enum MobAction {
     #[emoji("🗡️")]
     Riposte,
 
-    #[element("dark")]
+    #[element("prismatic")]
     #[stat("charisma")]
     #[emoji("👁️")]
     Glare,
 
-    #[element("existential")]
+    #[element("nonelemental")]
     #[stat("charisma")]
     #[emoji("🔊")]
     MindBreak,
 
-    #[element("fire")]
+    #[element("elemental")]
     #[stat("intelligence")]
     #[emoji("📛")]
     Burn,
@@ -452,12 +442,12 @@ pub enum MobAction {
     #[emoji("💥")]
     Explode,
 
-    #[element("dark")]
+    #[element("nonelemental")]
     #[stat("intelligence")]
     #[emoji("☠️")]
     NecroticBlast,
 
-    #[element("existential")]
+    #[element("physical")]
     #[stat("intelligence")]
     #[emoji("🧟")]
     SummonUndead,
@@ -472,12 +462,12 @@ pub enum MobAction {
     #[emoji("🔄")]
     Regenerate,
 
-    #[element("fire")]
+    #[element("elemental")]
     #[stat("intelligence")]
     #[emoji("☀")]
     SolarFlare,
 
-    #[element("dark")]
+    #[element("nonelemental")]
     #[stat("intelligence")]
     #[emoji("🌑")]
     ShadowNova,
@@ -492,7 +482,7 @@ pub enum MobAction {
     #[element("prismatic")]
     FrostBreath,
 
-    #[element("fire")]
+    #[element("elemntal")]
     #[stat("intelligence")]
     #[emoji("🔥")]
     DragonBreath,
@@ -502,7 +492,7 @@ pub enum MobAction {
     #[emoji("🐲")]
     TailSwipe,
 
-    #[element("despair")]
+    #[element("prismatic")]
     #[stat("charisma")]
     #[emoji("🌋")]
     FieryRoar,
@@ -539,24 +529,13 @@ impl MobAction {
     fn elemental_scaling(&self) -> i32 {
         if let Some(elemental) = ElementalScaling::scaling(self) {
             let (bottom, top) = match elemental {
-                DamageType::Fire => (0, 10),
-                DamageType::Water => (0, 10),
-                DamageType::Earth => (0, 10),
-                DamageType::Air => (0, 10),
-                DamageType::Light => (0, 10),
-                DamageType::Dark => (0, 10),
-                DamageType::Iron => (0, 10),
-                DamageType::Arcane => (0, 10),
-                DamageType::Holy => (0, 10),
                 DamageType::NonElemental => (0, 10),
                 DamageType::Physical => (0, 10),
-                DamageType::Hope => (0, 10),
-                DamageType::Despair => (0, 10),
-                DamageType::Existential => (0, 10),
                 DamageType::Boss => (0, 10),
                 DamageType::Prismatic => (0, 10),
                 DamageType::Healing => (0, 10),
                 DamageType::Universal => (0, 10),
+                DamageType::Elemental => (0, 10),
             };
             return thread_rng().gen_range(bottom..top);
         }
@@ -613,6 +592,14 @@ impl SkillSet {
         }
     }
 
+    pub fn display_for_cli(&self) -> Vec<String> {
+        let mut s = Vec::new();
+        s.push(format!("Skill: {}", self.skill));
+        s.push(format!("Level: {}", self.level));
+        s.push(format!("Experience: {}", self.experience));
+        s
+    }
+
     pub fn try_level_up(&mut self) {
         while self.experience >= self.experience_to_next_level() {
             self.level += 1;
@@ -652,7 +639,7 @@ impl SkillSet {
     }
 
     pub fn action_experience_scaling(&self) -> i32 {
-        (self.level * 10) as i32
+        self.level as i32
     }
 }
 #[cfg(test)]

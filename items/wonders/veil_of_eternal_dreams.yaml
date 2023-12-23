@@ -4,9 +4,9 @@ slot: WondrousItem
 armor: 30
 evasion: 80
 resistance:
-  Prismatic: 50
+  Prismatic: 250
 damage:
-  Prismatic: 30
+  Prismatic: 230
 attribute_bonus:
   strength: 0
   dexterity: 0

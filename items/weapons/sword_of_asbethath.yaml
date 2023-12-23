@@ -3,9 +3,8 @@ description: ''
 slot: Weapon
 armor: null
 damage:
-  Existential: 190
-  Despair: 190
-  Holy: 190
+  NonElemental: 800
+  Physical: 100
 attribute_bonus:
   strength: 10
   dexterity: 0

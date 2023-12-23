@@ -13,7 +13,7 @@ resistance:
   Elemental: 20
   Physical: 10
 damage:
-  Fire: 10
+  Elemental: 10
   Physical: 10
 action: 0
 rarity: VeryRare

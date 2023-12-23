@@ -4,10 +4,8 @@ slot: Weapon
 armor: null
 resistance: null
 damage:
-  Despair: 30
-  Existential: 30
-  Hope: 80
-  Holy: 50
+  NonElemental: 300
+  Prismatic: 300
 attribute_bonus:
   strength: 0
   dexterity: 0

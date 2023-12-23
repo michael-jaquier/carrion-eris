@@ -63,7 +63,7 @@ pub struct MobQueue {
     pub(crate) mobs: Vec<Mob>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, Serialize, PartialEq, Deserialize, Default)]
 pub struct BattleInfo {
     pub action: Skill,
     pub enemy_action: String,
@@ -337,6 +337,7 @@ pub fn resistance_scaling(n: i32) -> f64 {
 
 pub trait ValidEnum {
     fn valid() -> String;
+    fn valid_flat() -> String;
 }
 
 trait EnemyEvents {

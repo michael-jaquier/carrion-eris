@@ -2,16 +2,15 @@
 //!
 //! cargo run --example event-poll-read
 
-use carrion_eris::class::Classes;
-use carrion_eris::game::gamesync::Event as GameEvent;
-use carrion_eris::game::gamesync::{Context, GameState};
-use carrion_eris::ui::cli::{status_bar, GameClient, Prompt, RawMode, Rect};
-use carrion_eris::ValidEnum;
-use carrion_patterns::fsm::StateMachine;
+use carrion_eris::{
+    game::gamesync::GameStates,
+    ui::cli::{status_bar, GameClient, Prompt, RawMode, Rect},
+};
+
 use crossterm::{
     cursor::MoveTo,
     event::{poll, read, Event, KeyCode},
-    style::{Color, Print},
+    style::Print,
     terminal::{self, Clear},
     QueueableCommand,
 };
@@ -22,30 +21,6 @@ use std::{
     time::Duration,
 };
 
-macro_rules! chat_msg {
-    ($chat:expr, $($arg:tt)*) => {
-        $chat.push(format!($($arg)*), Color::White)
-    }
-}
-
-macro_rules! game_msg_helper {
-    ($chat:expr, $($arg:literal)*) => {
-        $(
-            for line in $arg.split('\n') {
-                chat_msg!($chat, "{}", line);
-            }
-        )*
-    };
-}
-
-macro_rules! game_msg {
-    ($chat:expr, $arg:expr) => {
-        for line in format!("{}", $arg).split('\n') {
-            chat_msg!($chat, "{}", line);
-        }
-    };
-}
-
 fn main() -> io::Result<()> {
     let mut client = GameClient::default();
     let mut stdout = io::stdout();
@@ -53,6 +28,7 @@ fn main() -> io::Result<()> {
     let mut prompt = Prompt::default();
     let (mut w, mut h) = terminal::size()?;
 
+    let mut game = GameStates::new();
     while !client.quit {
         while poll(Duration::ZERO)? {
             match read()? {
@@ -68,7 +44,8 @@ fn main() -> io::Result<()> {
                     }
                     KeyCode::Enter => {
                         {
-                            let _prompt = prompt.buffer.iter().collect::<String>();
+                            let command = prompt.buffer.iter().collect::<String>();
+                            game.command(command, &mut client)
                         }
                         prompt.clear();
                     }
@@ -114,7 +91,7 @@ fn main() -> io::Result<()> {
         stdout.queue(MoveTo(0, 0))?;
         status_bar(&mut stdout, "4at", 0, 0, w.into())?;
 
-        client.messages.render(
+        client.render(
             &mut stdout,
             Rect {
                 x: 0,

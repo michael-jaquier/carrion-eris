@@ -9,13 +9,6 @@ use crossterm::{
     terminal, QueueableCommand,
 };
 
-const HELP: &str = r#"Blocking poll() & non-blocking read()
- - Keyboard, mouse and terminal resize events enabled
- - Prints "." every second if there's no event
- - Hit "c" to print current cursor position
- - Use Esc to quit
-"#;
-
 pub fn status_bar(
     qc: &mut impl QueueableCommand,
     label: &str,
@@ -119,29 +112,6 @@ impl Prompt {
     }
 }
 
-macro_rules! chat_msg {
-    ($chat:expr, $($arg:tt)*) => {
-        $chat.push(format!($($arg)*), Color::White)
-    }
-}
-
-macro_rules! game_msg_helper {
-    ($chat:expr, $($arg:literal)*) => {
-        $(
-            for line in $arg.split('\n') {
-                chat_msg!($chat, "{}", line);
-            }
-        )*
-    };
-}
-
-macro_rules! game_msg {
-    ($chat:expr, $arg:expr) => {
-        for line in format!("{}", $arg).split('\n') {
-            chat_msg!($chat, "{}", line);
-        }
-    };
-}
 pub struct RawMode;
 
 impl RawMode {
@@ -158,16 +128,19 @@ impl Drop for RawMode {
     }
 }
 
+type TerminalMessage = (String, Color);
+type TerminalMessages = Vec<TerminalMessage>;
+
 #[derive(Debug, Default)]
-pub struct Messages {
-    items: Vec<(String, Color)>,
+struct Messages {
+    items: TerminalMessages,
 }
 impl Messages {
-    pub fn push(&mut self, message: String, color: Color) {
+    fn push(&mut self, message: String, color: Color) {
         self.items.push((message, color));
     }
 
-    pub fn render(&mut self, qc: &mut impl QueueableCommand, boundary: Rect) -> io::Result<()> {
+    fn render(&mut self, qc: &mut impl QueueableCommand, boundary: Rect) -> io::Result<()> {
         let n = self.items.len();
         let m = n.checked_sub(boundary.h).unwrap_or(0);
         for (dy, (line, color)) in self.items.iter().skip(m).enumerate() {
@@ -179,8 +152,20 @@ impl Messages {
         Ok(())
     }
 }
+
 #[derive(Debug, Default)]
 pub struct GameClient {
     pub quit: bool,
-    pub messages: Messages,
+    messages: Messages,
+}
+
+impl GameClient {
+    pub fn send(&mut self, msg: TerminalMessages) {
+        for ms in msg.into_iter() {
+            self.messages.push(ms.0, ms.1);
+        }
+    }
+    pub fn render(&mut self, qc: &mut impl QueueableCommand, boundary: Rect) -> io::Result<()> {
+        self.messages.render(qc, boundary)
+    }
 }

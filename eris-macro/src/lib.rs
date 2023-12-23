@@ -38,6 +38,13 @@ pub fn eris_mob(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     toks.into()
 }
 
+#[proc_macro_derive(ErisFlatMob, attributes(mob))]
+#[proc_macro_error]
+pub fn impl_arasaka_applications(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let ast = syn::parse_macro_input!(input as syn::DeriveInput);
+    let toks = mob_actions::eris_flat_mob(&ast);
+    toks.into()
+}
 #[proc_macro_error]
 #[proc_macro_derive(ErisItemTemplate, attributes(slot))]
 pub fn eris_templates(input: proc_macro::TokenStream) -> proc_macro::TokenStream {

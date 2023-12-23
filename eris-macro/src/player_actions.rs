@@ -177,6 +177,12 @@ pub fn eris_valid_enum(ast: &DeriveInput) -> TokenStream2 {
                 [#(#ee),*].iter().map(|x| x.to_string()).collect::<Vec<_>>().join("\n")
 
             }
+
+            fn valid_flat() -> Vec<String> {
+                use #name::*;
+                [#(#ee),*].iter().map(|x| x.to_string()).collect::<Vec<_>>()
+            }
+
         }
     };
 

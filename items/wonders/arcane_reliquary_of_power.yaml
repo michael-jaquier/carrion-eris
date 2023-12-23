@@ -3,9 +3,10 @@ description: The Arcane Reliquary of Power is an artifact-tier wondrous item, a 
 slot: WondrousItem
 armor: null
 resistance:
-  Prismatic: 30
+  Prismatic: 90
+  Elemental: 90
 damage:
-  Arcane: 30
+  Elemental: 330
 attribute_bonus:
   strength: 0
   dexterity: 0

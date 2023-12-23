@@ -4,7 +4,7 @@ slot: Weapon
 armor: null
 resistance: null
 damage:
-  Fire: 300
+  Elemental: 300
 attribute_bonus:
   strength: 0
   dexterity: 0

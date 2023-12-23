@@ -364,7 +364,7 @@ impl CharacterTraits {
                         TraitMutation::MultiplicativeBonus(1.8),
                     );
                     trait_mutations
-                        .set_damage(DamageType::Universal, TraitMutation::CriticalChance(1.7))
+                        .set_damage(DamageType::Universal, TraitMutation::CriticalChance(0.15))
                 }
                 CharacterTraits::FolkHero => {
                     let mutations = vec![
@@ -421,7 +421,7 @@ impl CharacterTraits {
                     let traits = vec![
                         TraitMutation::FlatIncrease(200),
                         TraitMutation::CriticalChance(0.05),
-                        TraitMutation::CriticalMultiplier(1.5),
+                        TraitMutation::CriticalMultiplier(0.15),
                     ];
                     let alignments = vec![
                         Alignment::ChaoticEvil,
@@ -449,7 +449,7 @@ impl CharacterTraits {
                         .set_damage(DamageType::Universal, TraitMutation::CriticalChance(0.10));
                     trait_mutations.set_damage(
                         DamageType::Universal,
-                        TraitMutation::CriticalMultiplier(2.5),
+                        TraitMutation::CriticalMultiplier(0.25),
                     );
                 }
                 CharacterTraits::Energetic => {

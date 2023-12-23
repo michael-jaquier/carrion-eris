@@ -11,8 +11,9 @@ name = "eris_macro"
 
 [dependencies]
 convert_case = "0.6.0"
-proc-macro-error = "1"
-proc-macro2 = "1"
-quote = "1"
-syn = { version = "2.0.37", features = ["full"] }
 heck = "0.4.1"
+proc-macro2 = "1.0.51"
+quote = "1.0.23"
+rand = "0.8"
+syn = { version = "2.0.43", features = ["parsing", "extra-traits", "full"] }
+proc-macro-error = "1.0.4"

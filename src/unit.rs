@@ -45,6 +45,28 @@ impl Attributes {
         }
     }
 
+    pub fn display_for_cli(&self) -> Vec<String> {
+        let mut s = Vec::new();
+        if self.strength > 0 {
+            s.push(format!("\tStrength: {}", self.strength));
+        }
+        if self.dexterity > 0 {
+            s.push(format!("\tDexterity: {}", self.dexterity));
+        }
+        if self.constitution > 0 {
+            s.push(format!("\tConstitution: {}", self.constitution));
+        }
+        if self.intelligence > 0 {
+            s.push(format!("\tIntelligence: {}", self.intelligence));
+        }
+        if self.wisdom > 0 {
+            s.push(format!("\tWisdom: {}", self.wisdom));
+        }
+        if self.charisma > 0 {
+            s.push(format!("\tCharisma: {}", self.charisma));
+        }
+        s
+    }
     fn from_mob_rarity(mob: MobGrade) -> Self {
         let mob = log_power_scale(mob as i32, None).max(1);
         Self {

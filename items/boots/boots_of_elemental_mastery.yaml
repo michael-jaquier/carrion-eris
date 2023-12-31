@@ -5,10 +5,7 @@ armor: 100
 resistance:
   Elemental: 30
 damage:
-  Air: 150
-  Fire: 150
-  Water: 150
-  Earth: 150
+  Elemental: 250
 action: 0
 rarity: Legendary
 value: 300

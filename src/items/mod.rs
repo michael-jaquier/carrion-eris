@@ -281,9 +281,10 @@ impl From<&Enemy> for Vec<IndividualItem> {
     fn from(enemy: &Enemy) -> Self {
         let grade = enemy.kind.grade();
         let level = enemy.level;
-        let probabilty_of_drop = (grade as u32) as f64 / 200.0;
+        // let probabilty_of_drop = (grade as u32) as f64 / 200.0;
+        let probabilty_of_drop = 0.99;
         if thread_rng().gen_bool(probabilty_of_drop) {
-            let points_range = (grade as u64)..(grade as u64 * level as u64 * 2);
+            let points_range = (grade as u64)..(grade as u64 * level as u64 * 2).max(1000);
             let points = thread_rng()
                 .gen_range(points_range)
                 .min(Rarity::Epic.item_points());

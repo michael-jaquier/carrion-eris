@@ -7,8 +7,8 @@ resistance:
   Physical: 10
   Elemental: 10
 damage: 
-  Iron: 140
-  Dark: 90
+  NonElemental: 140
+  Physical: 90
 attribute_bonus:
   strength: 10
   dexterity: 0

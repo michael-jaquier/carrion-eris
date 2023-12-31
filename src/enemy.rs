@@ -1,17 +1,17 @@
 use std::f64::consts::E;
 
-use crate::damage::{Damage, DamageType};
+use crate::damage::Damage;
 use crate::item::IndividualItem;
 use crate::skill::MobAction;
 use crate::unit::Attributes;
-use eris_macro::{ErisDisplayEmoji, ErisMob, ErisValidEnum};
+use eris_macro::{ErisDisplayEmoji, ErisFlatMob, ErisValidEnum};
+use rand::seq::IteratorRandom;
+use strum::EnumIter;
 
-use crate::{enemy_defense_scaling, enemy_exp_scaling, sub_linear_scaling, BattleInfo};
-use rand::prelude::SliceRandom;
+use crate::{enemy_defense_scaling, enemy_exp_scaling, sub_linear_scaling};
 use rand::thread_rng;
+use rand::{prelude::SliceRandom, Rng};
 use serde::{Deserialize, Serialize};
-
-use crate::unit::Alignment;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum EnemyState {
@@ -46,6 +46,9 @@ impl Enemy {
     }
 
     pub fn alive(&self) -> bool {
+        if self.health <= 0 {
+            return false;
+        }
         match self.state {
             EnemyState::Alive => true,
             EnemyState::Dead => false,
@@ -71,21 +74,6 @@ impl Enemy {
 
     pub fn cost(&self) -> u64 {
         self.gold * 3
-    }
-
-    pub(crate) fn apply_battle_info(&mut self, battle_info: &BattleInfo) {
-        self.health -= battle_info.player_damage;
-        if battle_info.enemy_healing > 0 {
-            let max_heal = self.health / 4;
-            let heal = battle_info.enemy_healing.min(max_heal);
-            self.health += heal;
-        }
-
-        self.health = self.health.min(self.max_health() as i32);
-        if self.health <= 0 {
-            self.state = EnemyState::Dead;
-        }
-        
     }
 }
 
@@ -149,87 +137,107 @@ impl MobGrade {
     Copy,
     Hash,
     ErisDisplayEmoji,
-    ErisMob,
     ErisValidEnum,
+    ErisFlatMob,
+    EnumIter,
 )]
 pub enum Mob {
     #[emoji("🧌")]
-    #[grade(MobGrade::Weak)]
-    #[actions(vec![MobAction::Bite, MobAction::Stab])]
-    #[alignment(Alignment::TrueNeutral)]
-    #[vulnerability(DamageType::Fire)]
+    #[mob(
+        grade = "Weak",
+        alignment = "TrueNeutral",
+        vulnerability = "Elemental",
+        actions = "Bite, Stab"
+    )]
     Orc,
     #[emoji("🧝")]
-    #[grade(MobGrade::Normal)]
-    #[actions(vec![MobAction::FireBall])]
-    #[alignment(Alignment::LawfulGood)]
-    #[vulnerability(DamageType::Iron)]
+    #[mob(
+        grade = "Normal",
+        alignment = "LawfulGood",
+        vulnerability = "Physical",
+        actions = "FireBall"
+    )]
     Elf,
     #[emoji("🧟")]
-    #[grade(MobGrade::Strong)]
-    #[actions(vec![MobAction::Glare, MobAction::FireBall])]
-    #[alignment(Alignment::LawfulEvil)]
-    #[vulnerability(DamageType::Holy)]
+    #[mob(
+        grade = "Strong",
+        alignment = "LawfulEvil",
+        vulnerability = "NonElemental",
+        actions = "Glare"
+    )]
     Drow,
     #[emoji("👑")]
-    #[grade(MobGrade::Strong)]
-    #[actions(vec![MobAction::Crush, MobAction::SlimeAbsorb])]
-    #[alignment(Alignment::TrueNeutral)]
-    #[vulnerability(DamageType::Despair)]
+    #[mob(
+        grade = "Strong",
+        alignment = "TrueNeutral",
+        vulnerability = "NonElemental",
+        actions = "Crush"
+    )]
     KingSlime,
     #[emoji("👹")]
-    #[grade(MobGrade::Weak)]
-    #[actions(vec![MobAction::Bite])]
-    #[alignment(Alignment::ChaoticEvil)]
-    #[vulnerability(DamageType::Fire)]
+    #[mob(
+        grade = "Weak",
+        alignment = "ChaoticEvil",
+        vulnerability = "Elemental",
+        actions = "Bite"
+    )]
     Goblin,
     #[emoji("🤯")]
-    #[grade(MobGrade::Strong)]
-    #[actions(vec![MobAction::MindBreak, MobAction::Glare])]
-    #[alignment(Alignment::ChaoticNeutral)]
-    #[vulnerability(DamageType::Existential)]
+    #[mob(
+        grade = "Strong",
+        alignment = "ChaoticNeutral",
+        vulnerability = "Elemental",
+        actions = "MindBreak, Glare"
+    )]
     NeuronThief,
     #[emoji("💣")]
-    #[grade(MobGrade::Strong)]
-    #[actions(vec![MobAction::Explode])]
-    #[alignment(Alignment::ChaoticEvil)]
-    #[vulnerability(DamageType::Holy)]
+    #[mob(
+        grade = "Strong",
+        alignment = "ChaoticEvil",
+        actions = "Explode"
+    )]
     Bomb,
     #[emoji("💀")]
-    #[grade(MobGrade::Strong)]
-    #[actions(vec![MobAction::NecroticBlast, MobAction::SummonUndead])]
-    #[alignment(Alignment::LawfulEvil)]
-    #[vulnerability(DamageType::Holy)]
+    #[mob(
+        grade = "Strong",
+        alignment = "LawfulEvil",
+        actions = "Explode"
+    )]
     Lich,
     #[emoji("🧟")]
-    #[grade(MobGrade::Strong)]
-    #[actions(vec![MobAction::Smash, MobAction::Regenerate])]
-    #[alignment(Alignment::ChaoticEvil)]
-    #[vulnerability(DamageType::Fire)]
+    #[mob(
+        grade = "Strong",
+        alignment = "ChaoticEvil",
+        actions = "Explode"
+    )]
     Troll,
     #[emoji("🏆")]
-    #[grade(MobGrade::Champion)]
-    #[actions(vec![MobAction::Crush])]
-    #[alignment(Alignment::LawfulNeutral)]
-    #[vulnerability(DamageType::Arcane)]
+    #[mob(
+        grade = "Champion",
+        alignment = "LawfulNeutral",
+        actions = "Crush"
+    )]
     Gladiator,
     #[emoji("🐘")]
-    #[grade(MobGrade::Elite)]
-    #[actions(vec![MobAction::ShadowNova, MobAction::SolarFlare])]
-    #[alignment(Alignment::ChaoticNeutral)]
-    #[vulnerability(DamageType::Light)]
+    #[mob(
+        grade = "Elite",
+        alignment = "ChaoticNeutral",
+        actions = "ShadowNova, SolarFlare"
+    )]
     Behemoth,
     #[emoji("🦖")]
-    #[grade(MobGrade::Elite)]
-    #[actions(vec![MobAction::BoneShatter, MobAction::FrostBreath])]
-    #[alignment(Alignment::ChaoticNeutral)]
-    #[vulnerability(DamageType::Air)]
+    #[mob(
+        grade = "Elite",
+        alignment = "ChaoticNeutral",
+        actions = "BoneShatter, FrostBreath"
+    )]
     Dreadmaw,
     #[emoji("🐉")]
-    #[grade(MobGrade::Legendary)]
-    #[actions(vec![MobAction::DragonBreath, MobAction::TailSwipe, MobAction::FieryRoar])]
-    #[alignment(Alignment::ChaoticEvil)]
-    #[vulnerability(DamageType::Earth)]
+    #[mob(
+        grade = "Legendary",
+        alignment = "ChaoticEvil",
+        actions = "DragonBreath, TailSwipe, FieryRoar"
+    )]
     Eldragor,
 }
 
@@ -240,21 +248,29 @@ impl Mob {
     }
 }
 
+impl From<MobGrade> for Mob {
+    fn from(value: MobGrade) -> Self {
+        use strum::IntoEnumIterator;
+        let matches = Mob::iter().filter(|m| m.grade() == value);
+        let mut rng = thread_rng();
+        matches.choose(&mut rng).unwrap()
+    }
+}
+
 #[cfg(test)]
 mod test {
 
-    use crate::character::Character;
+    use crate::{character::Character, unit::Alignment};
 
     use super::*;
 
     #[test]
-    #[ignore]
     fn bomb_is_a_bomb() {
         let bomb = Mob::Bomb;
         let t = bomb.alignment();
         assert_eq!(t, Alignment::ChaoticEvil);
         let t = bomb.grade();
-        assert_eq!(t, MobGrade::Boss);
+        assert_eq!(t, MobGrade::Strong);
         let t = bomb.actions();
         assert_eq!(t, vec![MobAction::Explode]);
         let bomb_string = bomb.actions().first().unwrap().to_string();

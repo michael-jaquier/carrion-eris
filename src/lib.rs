@@ -297,7 +297,7 @@ pub fn exp_scaling(n: u32) -> u64 {
 #[instrument(ret, level = Level::TRACE)]
 pub fn enemy_exp_scaling(n: u32) -> u64 {
     let heartbeat_scaling = HEARTBEAT_INTERVAL.as_secs() as f64 / 10.0;
-    level_up_scaling(n, Some(1.1)) * (heartbeat_scaling as u64).max(1)
+    level_up_scaling(n, Some(1.1)) * (heartbeat_scaling as u64).max(1) * 200
 }
 
 #[instrument(ret, level = Level::TRACE)]
@@ -325,19 +325,19 @@ pub fn dodge_scaling(n: i32) -> f64 {
 
 #[instrument(ret, level = Level::TRACE)]
 pub fn armor_scaling(n: i32) -> f64 {
-    let n = n + 5;
-    100.0 - (100.0 * E.powf(-(n as f64 / 5.0).ln() / 3.0))
+    let n = n + 20;
+    100.0 - (100.0 * E.powf(-(n as f64 / 20.0).ln() / 5.0))
 }
 
 #[instrument(ret, level = Level::TRACE)]
 pub fn resistance_scaling(n: i32) -> f64 {
-    let n = n + 9;
-    100.0 - (100.0 * E.powf(-(n as f64 / 9.0).ln() / 3.0))
+    let n = n + 100;
+    100.0 - (100.0 * E.powf(-(n as f64 / 100.0).ln() / 5.0))
 }
 
 pub trait ValidEnum {
     fn valid() -> String;
-    fn valid_flat() -> String;
+    fn valid_flat() -> Vec<String>;
 }
 
 trait EnemyEvents {
@@ -367,13 +367,13 @@ mod test {
 
         let mitigation = defense.defense(crate::damage::ResistCategories::Physical);
         assert!(
-            mitigation > 72.,
+            mitigation > 40.,
             "Defense: {:?} mitigation {:3}",
             defense,
             mitigation
         );
         assert!(
-            mitigation < 80.,
+            mitigation < 50.,
             "Defense: {:?} mitigation {:3}",
             defense,
             mitigation
@@ -383,14 +383,14 @@ mod test {
     #[test]
     fn enemy_legendary_defense_scaling_high_level() {
         let mut charater: Character = Default::default();
-        charater.level = 150;
+        charater.level = 350;
         let enemy: Mob = Mob::Eldragor;
         let enemy: Enemy = enemy.generate(charater.level);
         let defense: Defense = (&enemy).into();
 
         let mitigation = defense.defense(crate::damage::ResistCategories::Physical);
         assert!(
-            mitigation > 80.,
+            mitigation > 60.,
             "Defense: {:?} mitigation {}",
             defense,
             mitigation
@@ -412,16 +412,30 @@ mod test {
         let defense: Defense = (&enemy).into();
         let mitigation = defense.defense(crate::damage::ResistCategories::Physical);
         assert!(
-            mitigation > 33.,
+            mitigation > 20.,
             "Defense: {:?} mitigation {}",
             defense,
             mitigation
         );
         assert!(
-            mitigation < 70.,
+            mitigation < 30.,
             "Defense: {:?} mitigation {}",
             defense,
             mitigation
         );
+        let mitigation = defense.defense(crate::damage::ResistCategories::Elemental);
+        assert!(
+            mitigation > 20.,
+            "Magical Defense: {:?} mitigation {}",
+            defense,
+            mitigation
+        );
+        assert!(
+            mitigation < 30.,
+            "Magical Defense: {:?} mitigation {}",
+            defense,
+            mitigation
+        );
+        
     }
 }

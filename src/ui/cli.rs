@@ -230,6 +230,12 @@ pub struct GameClient {
     size: (u16, u16),
 }
 
+impl Default for GameClient {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl GameClient {
     pub fn new() -> Self {
         Self {
@@ -250,13 +256,15 @@ impl GameClient {
             self.messages.push(ms.0, ms.1);
         }
     }
+
     pub(crate) fn msg_send(&mut self, msg: Messages) {
         self.messages.send(msg);
     }
+
     pub fn render(&mut self, boundary: Option<Rect>) -> io::Result<()> {
         self.messages.redraw(&mut self.io)?;
         let (w, h) = self.size;
-        let boundary = boundary.unwrap_or_else(|| Rect {
+        let boundary = boundary.unwrap_or(Rect {
             x: 0,
             y: 1,
             w: w as usize,

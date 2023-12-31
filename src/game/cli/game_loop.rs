@@ -63,7 +63,7 @@ impl GameState {
             if character.available_traits > 0 {
                 string = string.clone() + " !!! Avaliable Trait !!!";
             }
-            let _ = client.status_bar_bottom(&string);
+            client.status_bar_bottom(&string);
         }
     }
     pub(crate) fn get_character_ref_unchecked(&self) -> &Character {

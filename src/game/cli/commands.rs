@@ -85,7 +85,7 @@ pub(crate) fn create(state: &mut GameState, args: &[&str]) -> Messages {
                 Color::Red,
             );
             msg.extend(Classes::valid_flat(), Color::Magenta);
-            return msg;
+            msg
         }
     }
 }
@@ -341,9 +341,9 @@ pub(crate) fn fight(state: &mut GameState, args: &[&str]) -> Messages {
                 state.state = State::Null;
                 return msg.into();
             }
-            let mut enemy = state.location.get_mut_enemy();
+            let enemy = state.location.get_mut_enemy();
 
-            let damage_done = state.character.as_mut().unwrap().cli_player(&mut enemy);
+            let damage_done = state.character.as_mut().unwrap().cli_player(enemy);
 
             if !enemy.alive() {
                 let mut messages = Messages::new();
@@ -380,14 +380,10 @@ pub(crate) fn fight(state: &mut GameState, args: &[&str]) -> Messages {
                 messages.extend(character_display, Color::White);
                 return messages;
             }
-            let damage_taken = state.character.as_mut().unwrap().cli_enemy(&mut enemy);
+            let damage_taken = state.character.as_mut().unwrap().cli_enemy(enemy);
 
             if state.character.as_ref().unwrap().hp <= 0 {
                 let mut msg = Vec::new();
-                msg.extend(vec![(
-                    "You have been killed... better luck next time".to_string(),
-                    Color::DarkYellow,
-                )]);
                 msg.push((
                     format!(
                         "You did {damage_done} damage with {}",
@@ -396,6 +392,12 @@ pub(crate) fn fight(state: &mut GameState, args: &[&str]) -> Messages {
                     Color::Magenta,
                 ));
                 msg.push((format!("Enemy did {damage_taken} damage",), Color::Blue));
+                msg.extend(vec![(
+                    "You have been killed... better luck next time".to_string(),
+                    Color::DarkYellow,
+                )]);
+                msg.push(("".to_string(), Color::White));
+                msg.push(("Create a new character to continue your adventures".to_string(), Color::Blue));
                 state.character = None;
                 state.location.go_to_origin();
                 state.state = State::Null;

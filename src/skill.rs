@@ -639,7 +639,7 @@ impl SkillSet {
     }
 
     pub fn action_experience_scaling(&self) -> i32 {
-        (self.level * 10) as i32
+        self.level as i32
     }
 }
 #[cfg(test)]

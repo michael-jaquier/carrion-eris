@@ -41,12 +41,12 @@ impl Locations {
     }
 
     pub(crate) fn tag_enemy(&mut self) {
-        let coordinates = self.current.clone();
+        let coordinates = self.current;
         self.get_mut(&coordinates).unwrap().tagged = true;
     }
 
     pub(crate) fn enemy_killed(&mut self) {
-        let coordinates = self.current.clone();
+        let coordinates = self.current;
         self.get_mut(&coordinates).unwrap().enemy = None;
     }
 
@@ -143,19 +143,26 @@ impl Locations {
                 "You have been here before...and the locals remember you".to_string(),
                 crossterm::style::Color::Red,
             ));
+            msg.push((format!("Enemy {enemy} prepares their attack", 
+             enemy = state.location.current().enemy.as_ref().unwrap().kind), crossterm::style::Color::Red));
+
             state.state = State::Fighting;
             return msg;
         }
         
         if let Some(mob) = mob_generation_algo(state.location.current()) {
             if state.location.current().enemy.is_some() && state.character.is_some() {
-                return vec![(
-                    format!("You see a {enemy} in the distance", enemy = mob),
+                msg.push((
+                    format!(
+                        "You see a {enemy} in the distance",
+                        enemy = state.location.current().enemy.as_ref().unwrap().kind
+                    ),
                     crossterm::style::Color::Red,
-                )];
+                ));
+                return msg
             }
             let enemy = mob.generate(state.character.as_ref().unwrap().level);
-            let coordinates = state.location.current.clone();
+            let coordinates = state.location.current;
             state.location.get_mut(&coordinates).unwrap().enemy = Some(enemy);
             msg.push((
                 format!("You see a {enemy} in the distance", enemy = mob),
@@ -172,11 +179,11 @@ impl Locations {
     }
 
     pub(crate) fn go_to_origin(&mut self) {
-        self.current = (0, 0, 0);
+        self.current = (1, 1, 1);
     }
 
     pub(crate) fn get_mut_enemy(&mut self) -> &mut Enemy {
-        let coordinates = self.current.clone();
+        let coordinates = self.current;
         self.get_mut(&coordinates)
             .unwrap()
             .enemy
@@ -364,14 +371,13 @@ fn generate_map() -> HashMap<(i32, i32, u8), Location> {
         };
 
         let coordinates = (desc.x, desc.y, desc.z);
-        map.insert(coordinates.clone(), location);
+        map.insert(coordinates, location);
     }
     for desc in &descriptions {
         let coordinates = (desc.x, desc.y, desc.z);
         let new_directions = valid_direction_map(coordinates, &map);
         map.get_mut(&coordinates).unwrap().directions = new_directions;
     }
-
 
     map
 }
@@ -392,7 +398,7 @@ mod test {
         let json = serde_json::to_string(&desc).unwrap();
         assert_eq!(
             json,
-            r#"{"x":0,"y":0,"z":0,"descriptor":"You are in a dark room","valid_directions":["north","south"]}"#
+            r#"{"x":0,"y":0,"z":0,"descriptor":"You are in a dark room","tile":"Water"}"#
         );
  
 

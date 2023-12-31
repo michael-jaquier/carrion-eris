@@ -10,7 +10,7 @@ use strum::EnumIter;
 
 use crate::{enemy_defense_scaling, enemy_exp_scaling, sub_linear_scaling};
 use rand::thread_rng;
-use rand::{prelude::SliceRandom, Rng};
+use rand::prelude::SliceRandom;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

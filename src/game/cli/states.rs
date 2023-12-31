@@ -1,6 +1,6 @@
 use crossterm::style::Color;
 
-use crate::{character::Character, enemy::Enemy, ui::cli::TerminalMessages};
+use crate::{character::Character, ui::cli::TerminalMessages};
 
 use super::game_loop::GameState;
 

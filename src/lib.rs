@@ -297,7 +297,7 @@ pub fn exp_scaling(n: u32) -> u64 {
 #[instrument(ret, level = Level::TRACE)]
 pub fn enemy_exp_scaling(n: u32) -> u64 {
     let heartbeat_scaling = HEARTBEAT_INTERVAL.as_secs() as f64 / 10.0;
-    level_up_scaling(n, Some(1.1)) * (heartbeat_scaling as u64).max(1) * 200
+    level_up_scaling(n, Some(1.1)) * (heartbeat_scaling as u64).max(1) 
 }
 
 #[instrument(ret, level = Level::TRACE)]

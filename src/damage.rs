@@ -24,7 +24,7 @@ impl Defense {
     pub fn new_enemy(enemy: &Enemy) -> Self {
         let mut suppress = ResistCategories::resist_category_hash_map();
         suppress.insert(ResistCategories::Universal, enemy.resistance);
-        let armor = enemy.defense as i32;
+        let armor = enemy.defense;
         let dodge = crate::EnemyEvents::grade(&enemy.kind) as i32;
         Self {
             dodge,
@@ -278,7 +278,7 @@ impl UniqueDamageEffect {
                 battle_info.custom_text = Some("Berserk".to_string());
             }
             Vampire => {
-                battle_info.player_healing += (damage.damage() / 4) as i32;
+                battle_info.player_healing += damage.damage() / 4;
                 battle_info.custom_text = Some("Vampiric".to_string());
             }
             Death => {

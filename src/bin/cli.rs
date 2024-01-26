@@ -1,15 +1,9 @@
-//! Demonstrates how to match on modifiers like: Control, alt, shift.
-//!
-//! cargo run --example event-poll-read
-
 use carrion_eris::{
     game::cli::game_loop::GameStates,
     ui::cli::{GameClient, RawMode, TICK_RATE},
 };
 
-use crossterm::{
-    event::{poll, read, Event, KeyCode},
-};
+use crossterm::event::{poll, read, Event, KeyCode};
 
 use std::{
     io::{self, Write},

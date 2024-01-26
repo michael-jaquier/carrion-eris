@@ -201,7 +201,7 @@ impl From<&str> for DamageType {
     fn from(s: &str) -> Self {
         match s.to_lowercase().as_str() {
             "nonelemental" => DamageType::NonElemental,
-            "physical" => DamageType::Physical, 
+            "physical" => DamageType::Physical,
             "boss" => DamageType::Boss,
             "prismatic" => DamageType::Prismatic,
             "universal" => DamageType::Universal,

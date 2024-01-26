@@ -1,4 +1,6 @@
+-- An unfortunate hack because of how luarocks works on macos with homebrew
 package.path = "/opt/homebrew/Cellar/luarocks/3.9.2/share/lua/5.4/?.lua;/opt/homebrew/share/lua/5.4/?.lua;/opt/homebrew/share/lua/5.4/?/init.lua;/opt/homebrew/lib/lua/5.4/?.lua;/opt/homebrew/lib/lua/5.4/?/init.lua;./?.lua;./?/init.lua;/Users/michael.jaquier/.luarocks/share/lua/5.4/?.lua;/Users/michael.jaquier/.luarocks/share/lua/5.4/?/init.lua"
+
 local json = require('dkjson')
 
 count = 0
@@ -34,7 +36,7 @@ for y = 1, map_size.y do
     io.write("\n")
 end
 -- 1. Data
-map_size = {x = 20, y = 20, z = 1} -- Replace with your actual map size
+map_size = {x = 20, y = 20, z = 1}
 map = {}
 
 tile_set = {"Water", "Coast", "Grass", "Mountain", "Swamp", "Plains", "Cave"}
@@ -46,8 +48,8 @@ constraints = {
     Water = {"Water", "Coast"},
     Coast = {"Water", "Grass", "Coast"},
     Grass = {"Coast", "Mountain", "Grass", "Swamp"},
-    Mountain = {"Mountain", "Grass", "Plains"}
 }
+
 weights = {
     Cave = 0.01,
     Plains = 0.3,
@@ -56,7 +58,6 @@ weights = {
     Coast = 0.03,
     Grass = 0.3,
     Mountain = 0.08
-
 }
 
 local constraint_count = 0
@@ -157,12 +158,14 @@ local function weighted_random_choice(possible_tiles)
     for _, tile in ipairs(possible_tiles) do
         total_weight = total_weight + weights[tile]
     end
-    local choice = math.random() * total_weight
-    for _, tile in ipairs(possible_tiles) do
-        if weights[tile] >= choice then
-            return tile
+    local total_weight = total_weight * 100
+    while true do
+        for _, tile in ipairs(possible_tiles) do
+            local choice = math.random(0,total_weight)
+            if weights[tile]*100 >= choice then
+                return tile
+            end
         end
-        choice = choice - weights[tile]
     end
 end
 
@@ -208,3 +211,4 @@ end
 
 -- Usage:
 write_map_to_file("map.json")
+print_map()

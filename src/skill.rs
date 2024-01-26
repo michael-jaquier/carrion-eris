@@ -432,7 +432,7 @@ pub enum MobAction {
     #[emoji("🔊")]
     MindBreak,
 
-    #[element("elemental")] 
+    #[element("elemental")]
     #[stat("intelligence")]
     #[emoji("📛")]
     Burn,

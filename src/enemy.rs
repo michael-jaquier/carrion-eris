@@ -9,8 +9,8 @@ use rand::seq::IteratorRandom;
 use strum::EnumIter;
 
 use crate::{enemy_defense_scaling, enemy_exp_scaling, sub_linear_scaling};
-use rand::thread_rng;
 use rand::prelude::SliceRandom;
+use rand::thread_rng;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -191,32 +191,16 @@ pub enum Mob {
     )]
     NeuronThief,
     #[emoji("💣")]
-    #[mob(
-        grade = "Strong",
-        alignment = "ChaoticEvil",
-        actions = "Explode"
-    )]
+    #[mob(grade = "Strong", alignment = "ChaoticEvil", actions = "Explode")]
     Bomb,
     #[emoji("💀")]
-    #[mob(
-        grade = "Strong",
-        alignment = "LawfulEvil",
-        actions = "Explode"
-    )]
+    #[mob(grade = "Strong", alignment = "LawfulEvil", actions = "Explode")]
     Lich,
     #[emoji("🧟")]
-    #[mob(
-        grade = "Strong",
-        alignment = "ChaoticEvil",
-        actions = "Explode"
-    )]
+    #[mob(grade = "Strong", alignment = "ChaoticEvil", actions = "Explode")]
     Troll,
     #[emoji("🏆")]
-    #[mob(
-        grade = "Champion",
-        alignment = "LawfulNeutral",
-        actions = "Crush"
-    )]
+    #[mob(grade = "Champion", alignment = "LawfulNeutral", actions = "Crush")]
     Gladiator,
     #[emoji("🐘")]
     #[mob(

@@ -505,8 +505,6 @@ pub struct Equipment {
 }
 
 impl Equipment {
-
-    
     pub fn sum(&self) -> IndividualItem {
         let mut item = IndividualItem::new();
 

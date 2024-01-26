@@ -143,13 +143,18 @@ impl Locations {
                 "You have been here before...and the locals remember you".to_string(),
                 crossterm::style::Color::Red,
             ));
-            msg.push((format!("Enemy {enemy} prepares their attack", 
-             enemy = state.location.current().enemy.as_ref().unwrap().kind), crossterm::style::Color::Red));
+            msg.push((
+                format!(
+                    "Enemy {enemy} prepares their attack",
+                    enemy = state.location.current().enemy.as_ref().unwrap().kind
+                ),
+                crossterm::style::Color::Red,
+            ));
 
             state.state = State::Fighting;
             return msg;
         }
-        
+
         if let Some(mob) = mob_generation_algo(state.location.current()) {
             if state.location.current().enemy.is_some() && state.character.is_some() {
                 msg.push((
@@ -159,7 +164,7 @@ impl Locations {
                     ),
                     crossterm::style::Color::Red,
                 ));
-                return msg
+                return msg;
             }
             let enemy = mob.generate(state.character.as_ref().unwrap().level);
             let coordinates = state.location.current;
@@ -321,7 +326,10 @@ fn mob_generation_algo(location: &Location) -> Option<Mob> {
     Some(grade.into())
 }
 
-fn valid_direction_map(cordinates: Coordinates, locations: &HashMap<(i32, i32, u8), Location>) -> Vec<ValidDirections> {
+fn valid_direction_map(
+    cordinates: Coordinates,
+    locations: &HashMap<(i32, i32, u8), Location>,
+) -> Vec<ValidDirections> {
     let mut neighbors = Vec::new();
     let north = (cordinates.0, cordinates.1 + 1, cordinates.2);
     let south = (cordinates.0, cordinates.1 - 1, cordinates.2);
@@ -352,7 +360,6 @@ fn valid_direction_map(cordinates: Coordinates, locations: &HashMap<(i32, i32, u
     neighbors
 }
 
-
 fn generate_map() -> HashMap<(i32, i32, u8), Location> {
     let descriptions = load_descriptions();
     let mut map = HashMap::new();
@@ -373,6 +380,7 @@ fn generate_map() -> HashMap<(i32, i32, u8), Location> {
         let coordinates = (desc.x, desc.y, desc.z);
         map.insert(coordinates, location);
     }
+
     for desc in &descriptions {
         let coordinates = (desc.x, desc.y, desc.z);
         let new_directions = valid_direction_map(coordinates, &map);
@@ -400,10 +408,8 @@ mod test {
             json,
             r#"{"x":0,"y":0,"z":0,"descriptor":"You are in a dark room","tile":"Water"}"#
         );
- 
-
     }
-    
+
     #[test]
     fn test_deserialize_descriptions() {
         use super::Description;
@@ -412,5 +418,4 @@ mod test {
         let descriptions: Vec<Description> = serde_json::from_reader(reader).unwrap();
         assert!(!descriptions.is_empty());
     }
-
 }

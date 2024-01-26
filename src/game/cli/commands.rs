@@ -157,7 +157,14 @@ pub(crate) fn equipment_display(state: &mut GameState, args: &[&str]) -> Message
         Color::Magenta,
     );
 
-    let sum = state.get_character_ref_unchecked().equipment.sum().cli_display().into_iter().skip(2).collect();
+    let sum = state
+        .get_character_ref_unchecked()
+        .equipment
+        .sum()
+        .cli_display()
+        .into_iter()
+        .skip(2)
+        .collect();
     msgs.extend(sum, Color::Magenta);
     msgs
 }
@@ -397,7 +404,10 @@ pub(crate) fn fight(state: &mut GameState, args: &[&str]) -> Messages {
                     Color::DarkYellow,
                 )]);
                 msg.push(("".to_string(), Color::White));
-                msg.push(("Create a new character to continue your adventures".to_string(), Color::Blue));
+                msg.push((
+                    "Create a new character to continue your adventures".to_string(),
+                    Color::Blue,
+                ));
                 state.character = None;
                 state.location.go_to_origin();
                 state.state = State::Null;
